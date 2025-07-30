@@ -6,14 +6,30 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener((info) => {
   if (info.menuItemId === "beautifyQuote" && info.selectionText) {
     createQuoteImage(info.selectionText);
   }
 });
 
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(" ");
+  let line = "";
+  const lines = [];
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
+    if (ctx.measureText(testLine).width > maxWidth && n > 0) {
+      lines.push(line.trim());
+      line = words[n] + " ";
+    } else {
+      line = testLine;
+    }
+  }
+  lines.push(line.trim());
+  return lines;
+}
+
 function createQuoteImage(text) {
-  // Create a canvas (offscreen)
   const canvas = new OffscreenCanvas(800, 400);
   const ctx = canvas.getContext("2d");
 
@@ -30,36 +46,20 @@ function createQuoteImage(text) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  // Wrap text
   const lines = wrapText(ctx, text, 720);
   const lineHeight = 36;
   const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
   lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
 
-  // Convert to blob and download
+  // Convert canvas to blob → convert blob to base64 → download
   canvas.convertToBlob().then((blob) => {
-    const url = URL.createObjectURL(blob);
-    chrome.downloads.download({
-      url: url,
-      filename: "quote.png",
-    });
+    const reader = new FileReader();
+    reader.onload = () => {
+      chrome.downloads.download({
+        url: reader.result,
+        filename: "quote.png",
+      });
+    };
+    reader.readAsDataURL(blob);
   });
-}
-
-function wrapText(ctx, text, maxWidth) {
-  const words = text.split(" ");
-  let line = "";
-  const lines = [];
-  for (let n = 0; n < words.length; n++) {
-    const testLine = line + words[n] + " ";
-    const metrics = ctx.measureText(testLine);
-    if (metrics.width > maxWidth && n > 0) {
-      lines.push(line.trim());
-      line = words[n] + " ";
-    } else {
-      line = testLine;
-    }
-  }
-  lines.push(line.trim());
-  return lines;
 }
