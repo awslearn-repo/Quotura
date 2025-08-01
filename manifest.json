@@ -2,8 +2,14 @@
   "manifest_version": 3,
   "name": "Quotura",
   "version": "1.0",
-  "description": "Highlight text and create beautiful quote images with one click, saved directly to your Downloads folder.",
-  "permissions": ["contextMenus", "downloads"],
+  "description": "Highlight text, beautify it, and download as an image.",
+  "permissions": [
+    "contextMenus",
+    "downloads",
+    "downloads.open",
+    "tabs",
+    "storage"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -19,5 +25,11 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["preview.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
