@@ -29,6 +29,15 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
+// Brightness calculator for dynamic text color
+function getBrightness(hex) {
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = (rgb >> 16) & 0xff;
+  const g = (rgb >> 8) & 0xff;
+  const b = rgb & 0xff;
+  return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
 function createQuoteImage(text) {
   const canvas = new OffscreenCanvas(800, 400);
   const ctx = canvas.getContext("2d");
@@ -45,15 +54,15 @@ function createQuoteImage(text) {
     ["#fddb92", "#d1fdff"], // pastel
   ];
   const selected = gradients[Math.floor(Math.random() * gradients.length)];
-
   const gradient = ctx.createLinearGradient(0, 0, 800, 400);
   gradient.addColorStop(0, selected[0]);
   gradient.addColorStop(1, selected[1]);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 800, 400);
 
-  // Text styling
-  ctx.fillStyle = "#ffffff";
+  // Dynamic text color based on background brightness
+  const brightness = getBrightness(selected[0]);
+  ctx.fillStyle = brightness > 200 ? "#000000" : "#ffffff"; // black for light, white for dark
   ctx.font = "bold 28px Arial";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -63,10 +72,14 @@ function createQuoteImage(text) {
   const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
   lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
 
-  // Convert canvas to blob → convert blob to base64 → download
+  // Convert canvas to blob → data URL → open & download
   canvas.convertToBlob().then((blob) => {
     const reader = new FileReader();
     reader.onload = () => {
+      // Open in new tab
+      chrome.tabs.create({ url: reader.result });
+
+      // Also download
       chrome.downloads.download({
         url: reader.result,
         filename: "quote.png",
