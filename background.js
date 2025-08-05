@@ -8,7 +8,11 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener((info) => {
   if (info.menuItemId === "beautifyQuote" && info.selectionText) {
-    createQuoteImage(info.selectionText);
+    // Open preview tab immediately as part of user gesture
+    chrome.tabs.create({ url: chrome.runtime.getURL("preview.html") }, () => {
+      // Generate and store the image after opening tab
+      createQuoteImage(info.selectionText);
+    });
   }
 });
 
@@ -29,6 +33,7 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
+// Brightness calculator for dynamic text color
 function getBrightness(hex) {
   const rgb = parseInt(hex.slice(1), 16);
   const r = (rgb >> 16) & 0xff;
@@ -41,15 +46,16 @@ function createQuoteImage(text) {
   const canvas = new OffscreenCanvas(800, 400);
   const ctx = canvas.getContext("2d");
 
+  // Random gradient backgrounds
   const gradients = [
-    ["#4facfe", "#00f2fe"],
-    ["#43e97b", "#38f9d7"],
-    ["#fa709a", "#fee140"],
-    ["#30cfd0", "#330867"],
-    ["#ff9a9e", "#fad0c4"],
-    ["#a1c4fd", "#c2e9fb"],
-    ["#667eea", "#764ba2"],
-    ["#fddb92", "#d1fdff"],
+    ["#4facfe", "#00f2fe"], // blue
+    ["#43e97b", "#38f9d7"], // green-teal
+    ["#fa709a", "#fee140"], // pink-yellow
+    ["#30cfd0", "#330867"], // teal-purple
+    ["#ff9a9e", "#fad0c4"], // soft pink
+    ["#a1c4fd", "#c2e9fb"], // sky blue
+    ["#667eea", "#764ba2"], // violet
+    ["#fddb92", "#d1fdff"], // pastel
   ];
   const selected = gradients[Math.floor(Math.random() * gradients.length)];
   const gradient = ctx.createLinearGradient(0, 0, 800, 400);
@@ -58,6 +64,7 @@ function createQuoteImage(text) {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 800, 400);
 
+  // Dynamic text color based on background brightness
   const brightness = getBrightness(selected[0]);
   ctx.fillStyle = brightness > 200 ? "#000000" : "#ffffff";
   ctx.font = "bold 28px Arial";
@@ -72,28 +79,13 @@ function createQuoteImage(text) {
   canvas.convertToBlob().then((blob) => {
     const reader = new FileReader();
     reader.onload = () => {
-      const dataUrl = reader.result;
-
-      // Save image data for preview
-      chrome.storage.local.set({ quoteImage: dataUrl }, () => {
-        const previewUrl = chrome.runtime.getURL("preview.html");
-        chrome.tabs.create({ url: previewUrl });
+      // Save image data in chrome storage for preview tab
+      chrome.storage.local.set({ quoteImage: reader.result });
+      // Download the image
+      chrome.downloads.download({
+        url: reader.result,
+        filename: "quote.png",
       });
-
-      // Download and open the image
-      chrome.downloads.download(
-        {
-          url: dataUrl,
-          filename: "quote.png",
-        },
-        (downloadId) => {
-          if (downloadId) {
-            chrome.downloads.open(downloadId);
-          } else {
-            console.error("Download failed");
-          }
-        }
-      );
     };
     reader.readAsDataURL(blob);
   });

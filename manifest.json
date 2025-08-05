@@ -3,13 +3,7 @@
   "name": "Quotura",
   "version": "1.0",
   "description": "Highlight text, beautify it, and download as an image.",
-  "permissions": [
-    "contextMenus",
-    "downloads",
-    "downloads.open",
-    "tabs",
-    "storage"
-  ],
+  "permissions": ["contextMenus", "downloads", "storage"],
   "background": {
     "service_worker": "background.js"
   },
