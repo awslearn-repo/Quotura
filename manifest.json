@@ -1,29 +1,46 @@
 {
+  // Chrome Extension Manifest v3 - defines extension configuration and capabilities
   "manifest_version": 3,
+  
+  // Extension metadata
   "name": "Quotura",
   "version": "1.0",
   "description": "Highlight text, beautify it, and download as an image.",
-  "permissions": ["contextMenus", "downloads", "storage"],
+  
+  // Required permissions for extension functionality
+  "permissions": [
+    "contextMenus",  // Allows adding right-click context menu items
+    "downloads",     // Enables programmatic file downloads
+    "storage"        // Provides access to chrome.storage API for temporary data
+  ],
+  
+  // Background script configuration - runs persistently to handle events
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js"  // Main logic for context menu and image generation
   },
+  
+  // Extension popup configuration (appears when clicking extension icon)
   "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+    "default_popup": "popup.html",     // HTML file for popup interface
+    "default_icon": {                  // Icon sizes for different UI contexts
+      "16": "icons/icon16.png",        // Toolbar icon
+      "48": "icons/icon48.png",        // Extensions management page
+      "128": "icons/icon128.png"       // Chrome Web Store
     }
   },
+  
+  // Extension icons for Chrome Web Store and extension management
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  
+  // Resources that can be accessed by web pages
   "web_accessible_resources": [
     {
-      "resources": ["preview.html"],
-      "matches": ["<all_urls>"]
+      "resources": ["preview.html"],   // Preview page needs to be accessible for new tab creation
+      "matches": ["<all_urls>"]        // Allow access from any website
     }
   ]
 }
