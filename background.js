@@ -29,6 +29,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
           sendResponse({ imageData });
         });
+      } else {
+        // Fallback: if no gradient stored, use the original function (shouldn't happen)
+        console.warn("No currentGradient found, using fallback");
+        generateQuoteImageData(data.quoteText, false).then((imageData) => {
+          sendResponse({ imageData });
+        });
       }
     });
     return true; // Keep message channel open for async response
@@ -258,8 +264,8 @@ function generateQuoteImageData(text, includeWatermark = true) {
     
     // Always select a new random gradient for fresh generation
     const selected = gradients[Math.floor(Math.random() * gradients.length)];
-    // Store the selected gradient for potential regeneration (watermark removal/SVG)
-    chrome.storage.local.set({ currentGradient: selected }, () => {
+    // Store the selected gradient immediately for potential regeneration (watermark removal/SVG)
+    chrome.storage.local.set({ currentGradient: selected });
       
       const gradient = ctx.createLinearGradient(0, 0, 800, 400);
       gradient.addColorStop(0, selected[0]);
@@ -290,20 +296,16 @@ function generateQuoteImageData(text, includeWatermark = true) {
         reader.onload = () => resolve(reader.result);
         reader.readAsDataURL(blob);
       });
-    });
   });
 }
 
 function createQuoteImage(text) {
-  // Clear any cached data first to ensure fresh generation
-  chrome.storage.local.clear(() => {
-    // Store the original text for later use
-    chrome.storage.local.set({ quoteText: text });
-    
-    // Generate image with watermark by default, but don't auto-download
-    generateQuoteImageData(text, true).then((imageData) => {
-      // Only save image data in Chrome storage for preview tab access
-      chrome.storage.local.set({ quoteImage: imageData });
-    });
+  // Store the original text for later use
+  chrome.storage.local.set({ quoteText: text });
+  
+  // Generate image with watermark by default, but don't auto-download
+  generateQuoteImageData(text, true).then((imageData) => {
+    // Only save image data in Chrome storage for preview tab access
+    chrome.storage.local.set({ quoteImage: imageData });
   });
 }

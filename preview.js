@@ -182,10 +182,12 @@ document.addEventListener("DOMContentLoaded", () => {
     
     setButtonLoading(removeWatermarkBtn, true);
     
-    // Request image generation without watermark from background script
-    chrome.runtime.sendMessage({
-      action: "generateWithoutWatermark"
-    }, (response) => {
+    // Small delay to ensure gradient is properly stored
+    setTimeout(() => {
+      // Request image generation without watermark from background script
+      chrome.runtime.sendMessage({
+        action: "generateWithoutWatermark"
+      }, (response) => {
       setButtonLoading(removeWatermarkBtn, false);
       
       if (response && response.imageData) {
@@ -205,6 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showNotification("Failed to remove watermark", "error");
       }
     });
+    }, 200); // 200ms delay to ensure storage is complete
   }
   
   /**
