@@ -289,18 +289,29 @@ function initializeInteractiveBlobs() {
       // Define influence radius (how close cursor needs to be to affect the element)
       const influenceRadius = 150;
       
-      if (distance < influenceRadius && distance > 0) {
-        // Calculate movement intensity based on distance (closer = more movement)
-        const intensity = (influenceRadius - distance) / influenceRadius;
-        
-        // Calculate gentle push away from cursor
-        const pushDistance = intensity * 30; // Maximum 30px movement
-        const pushX = (deltaX / distance) * pushDistance;
-        const pushY = (deltaY / distance) * pushDistance;
-        
-        // Apply gentle movement with slight scale increase
-        const scaleIncrease = 1 + (intensity * 0.1); // Maximum 10% scale increase
-        element.style.transform = `translate(${pushX}px, ${pushY}px) scale(${scaleIncrease})`;
+             if (distance < influenceRadius && distance > 0) {
+         // Calculate movement intensity based on distance (closer = more movement)
+         const intensity = (influenceRadius - distance) / influenceRadius;
+         
+         // Different physics for blobs vs bubbles (blobs are more reactive)
+         let pushDistance, scaleIncrease;
+         
+         if (element.classList.contains('blob')) {
+           // Blobs move further and are more sensitive (like they're lighter/more fluid)
+           pushDistance = intensity * 60; // Maximum 60px movement for blobs
+           scaleIncrease = 1 + (intensity * 0.15); // Maximum 15% scale increase
+         } else {
+           // Bubbles have gentler movement (like they're heavier/more stable)
+           pushDistance = intensity * 30; // Maximum 30px movement for bubbles
+           scaleIncrease = 1 + (intensity * 0.1); // Maximum 10% scale increase
+         }
+         
+         // Calculate push direction away from cursor
+         const pushX = (deltaX / distance) * pushDistance;
+         const pushY = (deltaY / distance) * pushDistance;
+         
+         // Apply movement with physics-based scaling
+         element.style.transform = `translate(${pushX}px, ${pushY}px) scale(${scaleIncrease})`;
         
         // Add slight glow effect when influenced
         if (element.classList.contains('bubble')) {
