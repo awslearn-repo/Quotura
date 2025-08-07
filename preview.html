@@ -4,52 +4,141 @@
     <meta charset="UTF-8" />
     <title>Quotura Preview</title>
     <style>
-      /* Main layout - vertical flex container for preview interface */
+      /* Main layout - vertical flex container with beautiful background */
       body {
         display: flex;
         flex-direction: column;
         align-items: center;           /* Center horizontally */
         justify-content: flex-start;   /* Start from top */
-        font-family: Arial, sans-serif;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         padding: 20px;
+        margin: 0;
+        min-height: 100vh;
+        
+        /* Beautiful gradient background with subtle animation */
+        background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c, #4facfe, #00f2fe);
+        background-size: 400% 400%;
+        animation: gradientShift 15s ease infinite;
+        
+        /* Overlay pattern for texture */
+        position: relative;
       }
       
-      /* Status message styling */
+      /* Animated gradient background */
+      @keyframes gradientShift {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+        }
+      }
+      
+      /* Subtle dot pattern overlay */
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.1) 1px, transparent 0);
+        background-size: 20px 20px;
+        pointer-events: none;
+        z-index: 1;
+      }
+      
+      /* Ensure content appears above the overlay */
+      body > * {
+        position: relative;
+        z-index: 2;
+      }
+      
+      /* Status message styling with glassmorphism effect */
       #message {
-        font-size: 18px;
-        margin-bottom: 20px;
-        color: #333;                   /* Dark gray for good readability */
+        font-size: 20px;
+        margin-bottom: 30px;
+        color: #ffffff;
+        text-align: center;
+        font-weight: 600;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        
+        /* Glassmorphism background */
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 15px;
+        padding: 15px 25px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
       }
       
-      /* Generated quote image styling */
+      /* Generated quote image styling with enhanced presentation */
       #image {
-        max-width: 90%;                /* Responsive width with margins */
-        max-height: 80vh;              /* Limit height to viewport */
-        border: 2px solid #ccc;        /* Light border for definition */
-        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
+        max-width: 85%;                /* Responsive width with margins */
+        max-height: 70vh;              /* Limit height to viewport */
+        border-radius: 20px;           /* Rounded corners for modern look */
+        
+        /* Enhanced shadow and glow effect */
+        box-shadow: 
+          0 20px 40px rgba(0, 0, 0, 0.3),
+          0 0 0 1px rgba(255, 255, 255, 0.1),
+          0 0 60px rgba(255, 255, 255, 0.1);
+        
+        /* Smooth transitions */
+        transition: all 0.3s ease;
+        
+        /* Glassmorphism border */
+        border: 2px solid rgba(255, 255, 255, 0.2);
       }
       
-      /* Export buttons container */
+      /* Hover effect for the image */
+      #image:hover {
+        transform: translateY(-5px) scale(1.02);
+        box-shadow: 
+          0 25px 50px rgba(0, 0, 0, 0.4),
+          0 0 0 1px rgba(255, 255, 255, 0.2),
+          0 0 80px rgba(255, 255, 255, 0.2);
+      }
+      
+      /* Export buttons container with glassmorphism */
       .export-buttons {
-        margin-top: 20px;
+        margin-top: 30px;
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
+        gap: 15px;
         justify-content: center;
-        max-width: 600px;
+        max-width: 700px;
+        
+        /* Glassmorphism background for button container */
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
       }
       
-      /* Base button styling */
+      /* Base button styling with enhanced effects */
       .export-btn {
-        padding: 12px 20px;
-        font-size: 14px;
+        padding: 14px 24px;
+        font-size: 15px;
         color: white;
         border: none;
-        border-radius: 6px;
+        border-radius: 12px;
         cursor: pointer;
-        transition: all 0.3s ease;
-        min-width: 140px;
-        font-weight: 500;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        min-width: 150px;
+        font-weight: 600;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        
+        /* Enhanced shadow and border */
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 
+          0 4px 15px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.2);
       }
       
       /* Primary button (PNG download) */
@@ -59,8 +148,10 @@
       
       .btn-primary:hover {
         background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+        transform: translateY(-3px) scale(1.05);
+        box-shadow: 
+          0 8px 25px rgba(79, 172, 254, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
       }
       
       /* Secondary button (SVG download) */
@@ -70,8 +161,10 @@
       
       .btn-secondary:hover {
         background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        transform: translateY(-3px) scale(1.05);
+        box-shadow: 
+          0 8px 25px rgba(102, 126, 234, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
       }
       
       /* Success button (copy to clipboard) */
@@ -81,8 +174,10 @@
       
       .btn-success:hover {
         background: linear-gradient(135deg, #38f9d7 0%, #43e97b 100%);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(67, 233, 123, 0.4);
+        transform: translateY(-3px) scale(1.05);
+        box-shadow: 
+          0 8px 25px rgba(67, 233, 123, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
       }
       
       /* Warning button (remove watermark) */
@@ -93,8 +188,10 @@
       
       .btn-warning:hover {
         background: linear-gradient(135deg, #fee140 0%, #fa709a 100%);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(250, 112, 154, 0.4);
+        transform: translateY(-3px) scale(1.05);
+        box-shadow: 
+          0 8px 25px rgba(250, 112, 154, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
       }
       
       /* Disabled state */
