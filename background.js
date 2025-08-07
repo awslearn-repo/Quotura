@@ -300,12 +300,15 @@ function generateQuoteImageData(text, includeWatermark = true) {
 }
 
 function createQuoteImage(text) {
-  // Store the original text for later use
-  chrome.storage.local.set({ quoteText: text });
-  
-  // Generate image with watermark by default, but don't auto-download
-  generateQuoteImageData(text, true).then((imageData) => {
-    // Only save image data in Chrome storage for preview tab access
-    chrome.storage.local.set({ quoteImage: imageData });
+  // Clear old image data first to prevent showing stale content
+  chrome.storage.local.remove(['quoteImage'], () => {
+    // Store the original text for later use
+    chrome.storage.local.set({ quoteText: text });
+    
+    // Generate image with watermark by default, but don't auto-download
+    generateQuoteImageData(text, true).then((imageData) => {
+      // Only save image data in Chrome storage for preview tab access
+      chrome.storage.local.set({ quoteImage: imageData });
+    });
   });
 }
