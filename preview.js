@@ -256,4 +256,122 @@ document.addEventListener("DOMContentLoaded", () => {
   downloadSvgBtn.addEventListener("click", downloadSVG);
   copyImageBtn.addEventListener("click", copyToClipboard);
   removeWatermarkBtn.addEventListener("click", removeWatermark);
+  
+  // Interactive blob functionality
+  initializeInteractiveBlobs();
 });
+
+/**
+ * Initialize interactive blob movement
+ */
+function initializeInteractiveBlobs() {
+  const blobs = document.querySelectorAll('.blob');
+  
+  blobs.forEach((blob, index) => {
+    // Store original position
+    const rect = blob.getBoundingClientRect();
+    blob.originalLeft = parseFloat(getComputedStyle(blob).left);
+    blob.originalTop = parseFloat(getComputedStyle(blob).top);
+    
+    // Mouse enter - blob tries to escape
+    blob.addEventListener('mouseenter', (e) => {
+      const blobRect = blob.getBoundingClientRect();
+      const blobCenterX = blobRect.left + blobRect.width / 2;
+      const blobCenterY = blobRect.top + blobRect.height / 2;
+      
+      // Calculate escape direction (away from cursor)
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+      
+      const deltaX = blobCenterX - mouseX;
+      const deltaY = blobCenterY - mouseY;
+      
+      // Normalize and amplify the escape distance
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const escapeDistance = 100; // pixels to move away
+      
+      if (distance > 0) {
+        const escapeX = (deltaX / distance) * escapeDistance;
+        const escapeY = (deltaY / distance) * escapeDistance;
+        
+        // Apply escape transformation
+        blob.classList.add('escaping');
+        blob.style.transform = `translate(${escapeX}px, ${escapeY}px) scale(1.1)`;
+      }
+    });
+    
+    // Mouse move - blob follows cursor avoidance
+    blob.addEventListener('mousemove', (e) => {
+      if (blob.classList.contains('escaping')) {
+        const blobRect = blob.getBoundingClientRect();
+        const blobCenterX = blobRect.left + blobRect.width / 2;
+        const blobCenterY = blobRect.top + blobRect.height / 2;
+        
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+        
+        const deltaX = blobCenterX - mouseX;
+        const deltaY = blobCenterY - mouseY;
+        
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        const escapeDistance = Math.min(150, Math.max(50, 200 - distance));
+        
+        if (distance > 0) {
+          const escapeX = (deltaX / distance) * escapeDistance;
+          const escapeY = (deltaY / distance) * escapeDistance;
+          
+          blob.style.transform = `translate(${escapeX}px, ${escapeY}px) scale(1.2)`;
+        }
+      }
+    });
+    
+    // Mouse leave - blob returns to original position
+    blob.addEventListener('mouseleave', () => {
+      blob.classList.remove('escaping');
+      blob.style.transform = '';
+      
+      // Add a gentle bounce back effect
+      setTimeout(() => {
+        blob.style.transition = 'transform 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+        setTimeout(() => {
+          blob.style.transition = 'transform 0.3s ease-out';
+        }, 800);
+      }, 50);
+    });
+    
+    // Click effect - blob "pops" and moves to random position
+    blob.addEventListener('click', (e) => {
+      e.preventDefault();
+      
+      // Random new position within viewport bounds
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const blobWidth = blob.offsetWidth;
+      const blobHeight = blob.offsetHeight;
+      
+      const newLeft = Math.random() * (viewportWidth - blobWidth - 100) + 50;
+      const newTop = Math.random() * (viewportHeight - blobHeight - 100) + 50;
+      
+      // Convert to percentage for responsive positioning
+      const newLeftPercent = (newLeft / viewportWidth) * 100;
+      const newTopPercent = (newTop / viewportHeight) * 100;
+      
+      // Pop effect
+      blob.style.transform = 'scale(1.5)';
+      blob.style.transition = 'transform 0.2s ease-out';
+      
+      setTimeout(() => {
+        // Move to new position
+        blob.style.left = `${newLeftPercent}%`;
+        blob.style.top = `${newTopPercent}%`;
+        blob.style.transform = 'scale(0.8)';
+        blob.style.transition = 'all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+        
+        setTimeout(() => {
+          blob.style.transform = '';
+          blob.style.transition = 'transform 0.3s ease-out';
+        }, 600);
+      }, 200);
+    });
+  });
+}
