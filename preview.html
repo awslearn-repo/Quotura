@@ -29,116 +29,21 @@
         box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
       }
       
-      /* Export buttons container */
-      .export-buttons {
+      /* Download button styling */
+      #downloadBtn {
         margin-top: 20px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        justify-content: center;
-      }
-      
-      /* Base button styling */
-      .export-btn {
         padding: 10px 20px;
-        font-size: 14px;
+        font-size: 16px;
+        background-color: #4facfe;     /* Matches extension's blue theme */
         color: white;
         border: none;
         border-radius: 5px;            /* Rounded corners for modern look */
         cursor: pointer;
-        transition: background-color 0.3s ease;
-        min-width: 120px;
       }
       
-      /* Primary export buttons */
-      .btn-primary {
-        background-color: #4facfe;     /* Matches extension's blue theme */
-      }
-      
-      .btn-primary:hover {
+      /* Button hover effect */
+      #downloadBtn:hover {
         background-color: #00f2fe;     /* Lighter blue on hover */
-      }
-      
-      /* Secondary export buttons */
-      .btn-secondary {
-        background-color: #6c757d;     /* Gray for secondary actions */
-      }
-      
-      .btn-secondary:hover {
-        background-color: #545b62;     /* Darker gray on hover */
-      }
-      
-      /* Warning button for watermark removal */
-      .btn-warning {
-        background-color: #ffc107;     /* Yellow/orange for warning */
-        color: #000;                   /* Black text for better contrast */
-      }
-      
-      .btn-warning:hover {
-        background-color: #e0a800;     /* Darker yellow on hover */
-      }
-      
-      /* Success button for copy action */
-      .btn-success {
-        background-color: #28a745;     /* Green for success actions */
-      }
-      
-      .btn-success:hover {
-        background-color: #218838;     /* Darker green on hover */
-      }
-      
-      /* Loading state */
-      .btn-loading {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-      
-      /* Login modal styling */
-      .modal {
-        display: none;
-        position: fixed;
-        z-index: 1000;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0,0,0,0.5);
-      }
-      
-      .modal-content {
-        background-color: #fefefe;
-        margin: 15% auto;
-        padding: 20px;
-        border-radius: 10px;
-        width: 400px;
-        max-width: 90%;
-        text-align: center;
-      }
-      
-      .modal-content h2 {
-        color: #333;
-        margin-bottom: 15px;
-      }
-      
-      .modal-content p {
-        color: #666;
-        margin-bottom: 20px;
-      }
-      
-      .modal-content input {
-        width: 100%;
-        padding: 10px;
-        margin: 10px 0;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        font-size: 16px;
-      }
-      
-      .modal-buttons {
-        display: flex;
-        gap: 10px;
-        justify-content: center;
-        margin-top: 20px;
       }
     </style>
   </head>
@@ -151,30 +56,8 @@
     <!-- Container for the generated quote image -->
     <img id="image" src="" alt="Beautified Quote" />
     
-    <!-- Export buttons for various download options -->
-    <div class="export-buttons">
-      <button id="downloadPngBtn" class="export-btn btn-primary">Download PNG</button>
-      <button id="downloadSvgBtn" class="export-btn btn-secondary">Download SVG</button>
-      <button id="copyImageBtn" class="export-btn btn-success">Copy to Clipboard</button>
-      <button id="removeWatermarkBtn" class="export-btn btn-warning">Remove Watermark</button>
-    </div>
-
-    <!-- Login modal for watermark removal -->
-    <div id="loginModal" class="modal">
-      <div class="modal-content">
-        <h2>Login Required</h2>
-        <p>To remove the watermark, please log in with your account:</p>
-        <input type="email" id="loginEmail" placeholder="Email address" required>
-        <input type="password" id="loginPassword" placeholder="Password" required>
-        <div class="modal-buttons">
-          <button id="loginSubmitBtn" class="export-btn btn-primary">Login</button>
-          <button id="loginCancelBtn" class="export-btn btn-secondary">Cancel</button>
-        </div>
-        <p style="font-size: 12px; color: #999; margin-top: 15px;">
-          Don't have an account? This is a demo - any email/password will work for testing.
-        </p>
-      </div>
-    </div>
+    <!-- Button to re-download the image if needed -->
+    <button id="downloadBtn">Download Again</button>
 
     <!-- External JS file to comply with CSP (Content Security Policy) -->
     <!-- Inline scripts are not allowed in Chrome extensions for security -->

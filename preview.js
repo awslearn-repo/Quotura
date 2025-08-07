@@ -2,335 +2,36 @@
 // This ensures all HTML elements are available for manipulation
 document.addEventListener("DOMContentLoaded", () => {
   // Get references to key DOM elements
-  const img = document.getElementById("image");              // Image container for generated quote
-  const msg = document.getElementById("message");            // Status message element
-  const downloadPngBtn = document.getElementById("downloadPngBtn");   // PNG download button
-  const downloadSvgBtn = document.getElementById("downloadSvgBtn");   // SVG download button
-  const copyImageBtn = document.getElementById("copyImageBtn");       // Copy to clipboard button
-  const removeWatermarkBtn = document.getElementById("removeWatermarkBtn"); // Remove watermark button
-  
-  // Login modal elements
-  const loginModal = document.getElementById("loginModal");
-  const loginSubmitBtn = document.getElementById("loginSubmitBtn");
-  const loginCancelBtn = document.getElementById("loginCancelBtn");
-  const loginEmail = document.getElementById("loginEmail");
-  const loginPassword = document.getElementById("loginPassword");
-  
-  // State variables
-  let currentImageData = null;
-  let isLoggedIn = false;
-  
-  // Initialize the preview page
-  initializePreview();
-  
-  /**
-   * Initialize the preview page by loading the generated image
-   */
-  function initializePreview() {
-    // Retrieve the generated quote image from Chrome's local storage
-    // This was stored by background.js after image generation
+  const img = document.getElementById("image");      // Image container for generated quote
+  const msg = document.getElementById("message");    // Status message element
+  const btn = document.getElementById("downloadBtn"); // Re-download button
+
+  // Retrieve the generated quote image from Chrome's local storage
+  // This was stored by background.js after image generation
+  chrome.storage.local.get("quoteImage", (data) => {
+    if (data.quoteImage) {
+      // Image found - display it and update status message
+      img.src = data.quoteImage;                    // Set image source to data URL
+      msg.textContent = "Your beautified quote is ready!";
+    } else {
+      // No image found - show error message
+      // This shouldn't normally happen if user follows proper workflow
+      msg.textContent = "No image found!";
+    }
+  });
+
+  // Handle re-download button clicks
+  btn.addEventListener("click", () => {
+    // Retrieve image data again from storage
     chrome.storage.local.get("quoteImage", (data) => {
       if (data.quoteImage) {
-        // Image found - display it and update status message
-        currentImageData = data.quoteImage;
-        img.src = data.quoteImage;                    // Set image source to data URL
-        msg.textContent = "Your beautified quote is ready!";
-        
-        // Enable export buttons
-        enableExportButtons();
-      } else {
-        // No image found - show error message
-        // This shouldn't normally happen if user follows proper workflow
-        msg.textContent = "No image found!";
-        disableExportButtons();
-      }
-    });
-  }
-  
-  /**
-   * Enable all export buttons
-   */
-  function enableExportButtons() {
-    downloadPngBtn.disabled = false;
-    downloadSvgBtn.disabled = false;
-    copyImageBtn.disabled = false;
-    removeWatermarkBtn.disabled = false;
-  }
-  
-  /**
-   * Disable all export buttons
-   */
-  function disableExportButtons() {
-    downloadPngBtn.disabled = true;
-    downloadSvgBtn.disabled = true;
-    copyImageBtn.disabled = true;
-    removeWatermarkBtn.disabled = true;
-  }
-  
-  /**
-   * Set button loading state
-   * @param {HTMLElement} button - The button element
-   * @param {boolean} loading - Whether button is in loading state
-   */
-  function setButtonLoading(button, loading) {
-    if (loading) {
-      button.classList.add("btn-loading");
-      button.disabled = true;
-      button.dataset.originalText = button.textContent;
-      button.textContent = "Loading...";
-    } else {
-      button.classList.remove("btn-loading");
-      button.disabled = false;
-      button.textContent = button.dataset.originalText || button.textContent;
-    }
-  }
-  
-  /**
-   * Download PNG image
-   */
-  function downloadPNG() {
-    if (!currentImageData) return;
-    
-    setButtonLoading(downloadPngBtn, true);
-    
-    // Use current image data for download
-    chrome.downloads.download({
-      url: currentImageData,      // Data URL containing the image
-      filename: "quotura-quote.png",     // Filename for the download
-    }, () => {
-      setButtonLoading(downloadPngBtn, false);
-      showNotification("PNG downloaded successfully!", "success");
-    });
-  }
-  
-  /**
-   * Download SVG image
-   */
-  function downloadSVG() {
-    setButtonLoading(downloadSvgBtn, true);
-    
-    // Request SVG generation from background script
-    chrome.runtime.sendMessage({
-      action: "generateSVG",
-      includeWatermark: !isLoggedIn  // Include watermark unless user is logged in
-    }, (response) => {
-      setButtonLoading(downloadSvgBtn, false);
-      
-      if (response && response.svgData) {
-        // Download the SVG file
+        // Trigger download using Chrome's downloads API
+        // This creates a new download with the same image data
         chrome.downloads.download({
-          url: response.svgData,
-          filename: "quotura-quote.svg",
-        }, () => {
-          showNotification("SVG downloaded successfully!", "success");
+          url: data.quoteImage,      // Data URL containing the image
+          filename: "quote.png",     // Default filename for the download
         });
-      } else {
-        showNotification("Failed to generate SVG", "error");
       }
     });
-  }
-  
-  /**
-   * Copy image to clipboard
-   */
-  async function copyToClipboard() {
-    if (!currentImageData) return;
-    
-    setButtonLoading(copyImageBtn, true);
-    
-    try {
-      // Convert data URL to blob
-      const response = await fetch(currentImageData);
-      const blob = await response.blob();
-      
-      // Copy to clipboard using Clipboard API
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          [blob.type]: blob
-        })
-      ]);
-      
-      setButtonLoading(copyImageBtn, false);
-      showNotification("Image copied to clipboard!", "success");
-      
-      // Temporarily change button text to show success
-      const originalText = copyImageBtn.textContent;
-      copyImageBtn.textContent = "Copied!";
-      copyImageBtn.classList.add("btn-success");
-      
-      setTimeout(() => {
-        copyImageBtn.textContent = originalText;
-      }, 2000);
-      
-    } catch (error) {
-      setButtonLoading(copyImageBtn, false);
-      showNotification("Failed to copy to clipboard. Your browser may not support this feature.", "error");
-      console.error("Clipboard copy failed:", error);
-    }
-  }
-  
-  /**
-   * Handle watermark removal request
-   */
-  function handleRemoveWatermark() {
-    if (isLoggedIn) {
-      // User is already logged in, generate image without watermark
-      generateWithoutWatermark();
-    } else {
-      // Show login modal
-      showLoginModal();
-    }
-  }
-  
-  /**
-   * Generate image without watermark
-   */
-  function generateWithoutWatermark() {
-    setButtonLoading(removeWatermarkBtn, true);
-    
-    // Request image generation without watermark from background script
-    chrome.runtime.sendMessage({
-      action: "generateWithoutWatermark"
-    }, (response) => {
-      setButtonLoading(removeWatermarkBtn, false);
-      
-      if (response && response.imageData) {
-        // Update current image with watermark-free version
-        currentImageData = response.imageData;
-        img.src = response.imageData;
-        
-        // Update UI to reflect watermark removal
-        removeWatermarkBtn.textContent = "Watermark Removed";
-        removeWatermarkBtn.classList.remove("btn-warning");
-        removeWatermarkBtn.classList.add("btn-success");
-        removeWatermarkBtn.disabled = true;
-        
-        showNotification("Watermark removed successfully!", "success");
-      } else {
-        showNotification("Failed to remove watermark", "error");
-      }
-    });
-  }
-  
-  /**
-   * Show login modal
-   */
-  function showLoginModal() {
-    loginModal.style.display = "block";
-    loginEmail.focus();
-  }
-  
-  /**
-   * Hide login modal
-   */
-  function hideLoginModal() {
-    loginModal.style.display = "none";
-    loginEmail.value = "";
-    loginPassword.value = "";
-  }
-  
-  /**
-   * Handle login attempt
-   */
-  function handleLogin() {
-    const email = loginEmail.value.trim();
-    const password = loginPassword.value.trim();
-    
-    if (!email || !password) {
-      showNotification("Please enter both email and password", "error");
-      return;
-    }
-    
-    setButtonLoading(loginSubmitBtn, true);
-    
-    // Simulate login process (in a real app, this would call an API)
-    setTimeout(() => {
-      // For demo purposes, any non-empty email/password combination works
-      if (email.includes("@") && password.length > 0) {
-        isLoggedIn = true;
-        hideLoginModal();
-        setButtonLoading(loginSubmitBtn, false);
-        showNotification("Login successful!", "success");
-        
-        // Update remove watermark button
-        removeWatermarkBtn.textContent = "Remove Watermark";
-        removeWatermarkBtn.classList.remove("btn-warning");
-        removeWatermarkBtn.classList.add("btn-primary");
-        
-        // Automatically remove watermark
-        generateWithoutWatermark();
-      } else {
-        setButtonLoading(loginSubmitBtn, false);
-        showNotification("Invalid email or password", "error");
-      }
-    }, 1000); // Simulate network delay
-  }
-  
-  /**
-   * Show notification message
-   * @param {string} message - The notification message
-   * @param {string} type - The notification type (success, error, info)
-   */
-  function showNotification(message, type = "info") {
-    // Update the main message element temporarily
-    const originalMessage = msg.textContent;
-    const originalColor = msg.style.color;
-    
-    msg.textContent = message;
-    
-    // Set color based on type
-    switch (type) {
-      case "success":
-        msg.style.color = "#28a745";
-        break;
-      case "error":
-        msg.style.color = "#dc3545";
-        break;
-      default:
-        msg.style.color = "#333";
-    }
-    
-    // Restore original message after 3 seconds
-    setTimeout(() => {
-      msg.textContent = originalMessage;
-      msg.style.color = originalColor;
-    }, 3000);
-  }
-  
-  // Event listeners for export buttons
-  downloadPngBtn.addEventListener("click", downloadPNG);
-  downloadSvgBtn.addEventListener("click", downloadSVG);
-  copyImageBtn.addEventListener("click", copyToClipboard);
-  removeWatermarkBtn.addEventListener("click", handleRemoveWatermark);
-  
-  // Event listeners for login modal
-  loginSubmitBtn.addEventListener("click", handleLogin);
-  loginCancelBtn.addEventListener("click", hideLoginModal);
-  
-  // Close modal when clicking outside of it
-  loginModal.addEventListener("click", (event) => {
-    if (event.target === loginModal) {
-      hideLoginModal();
-    }
-  });
-  
-  // Handle Enter key in login form
-  loginEmail.addEventListener("keypress", (event) => {
-    if (event.key === "Enter") {
-      loginPassword.focus();
-    }
-  });
-  
-  loginPassword.addEventListener("keypress", (event) => {
-    if (event.key === "Enter") {
-      handleLogin();
-    }
-  });
-  
-  // Handle Escape key to close modal
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && loginModal.style.display === "block") {
-      hideLoginModal();
-    }
   });
 });
