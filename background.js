@@ -210,15 +210,10 @@ function generateQuoteImageData(text, includeWatermark = true) {
       ["#fddb92", "#d1fdff"], // pastel
     ];
     
-    // Use stored gradient or select randomly
-    let selected;
-    chrome.storage.local.get("currentGradient", (data) => {
-      if (data.currentGradient) {
-        selected = data.currentGradient;
-      } else {
-        selected = gradients[Math.floor(Math.random() * gradients.length)];
-        chrome.storage.local.set({ currentGradient: selected });
-      }
+    // Always select a new random gradient for fresh generation
+    const selected = gradients[Math.floor(Math.random() * gradients.length)];
+    // Store the selected gradient for potential regeneration (watermark removal/SVG)
+    chrome.storage.local.set({ currentGradient: selected }, () => {
       
       const gradient = ctx.createLinearGradient(0, 0, 800, 400);
       gradient.addColorStop(0, selected[0]);
@@ -254,12 +249,15 @@ function generateQuoteImageData(text, includeWatermark = true) {
 }
 
 function createQuoteImage(text) {
-  // Store the original text for later use
-  chrome.storage.local.set({ quoteText: text });
-  
-  // Generate image with watermark by default, but don't auto-download
-  generateQuoteImageData(text, true).then((imageData) => {
-    // Only save image data in Chrome storage for preview tab access
-    chrome.storage.local.set({ quoteImage: imageData });
+  // Clear any cached data first to ensure fresh generation
+  chrome.storage.local.clear(() => {
+    // Store the original text for later use
+    chrome.storage.local.set({ quoteText: text });
+    
+    // Generate image with watermark by default, but don't auto-download
+    generateQuoteImageData(text, true).then((imageData) => {
+      // Only save image data in Chrome storage for preview tab access
+      chrome.storage.local.set({ quoteImage: imageData });
+    });
   });
 }
