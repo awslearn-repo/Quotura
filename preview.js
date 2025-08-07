@@ -29,7 +29,10 @@ document.addEventListener("DOMContentLoaded", () => {
     msg.textContent = "Generating your beautiful quote...";
     disableExportButtons();
     
-    // Wait a bit for the background script to generate the new image
+    // Wait for the background script to generate the new image
+    let retryCount = 0;
+    const maxRetries = 100; // Maximum 10 seconds of waiting
+    
     const checkForImage = () => {
       chrome.storage.local.get("quoteImage", (data) => {
         if (data.quoteImage) {
@@ -42,7 +45,14 @@ document.addEventListener("DOMContentLoaded", () => {
           enableExportButtons();
         } else {
           // No image found yet - retry after a short delay
-          setTimeout(checkForImage, 100);
+          retryCount++;
+          if (retryCount < maxRetries) {
+            setTimeout(checkForImage, 100);
+          } else {
+            // Timeout - show error message
+            msg.textContent = "Failed to generate image. Please try again.";
+            msg.style.color = "#dc3545";
+          }
         }
       });
     };
