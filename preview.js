@@ -262,116 +262,84 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /**
- * Initialize interactive blob movement
+ * Initialize gentle physics-like movement for all bubbles and blobs
  */
 function initializeInteractiveBlobs() {
+  // Get all interactive elements (both bubbles and blobs)
+  const bubbles = document.querySelectorAll('.bubble');
   const blobs = document.querySelectorAll('.blob');
+  const allElements = [...bubbles, ...blobs];
   
-  blobs.forEach((blob, index) => {
-    // Store original position
-    const rect = blob.getBoundingClientRect();
-    blob.originalLeft = parseFloat(getComputedStyle(blob).left);
-    blob.originalTop = parseFloat(getComputedStyle(blob).top);
+  // Add mouse move listener to the entire document
+  document.addEventListener('mousemove', (e) => {
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
     
-    // Mouse enter - blob tries to escape
-    blob.addEventListener('mouseenter', (e) => {
-      const blobRect = blob.getBoundingClientRect();
-      const blobCenterX = blobRect.left + blobRect.width / 2;
-      const blobCenterY = blobRect.top + blobRect.height / 2;
+    allElements.forEach((element) => {
+      // Get element center position
+      const rect = element.getBoundingClientRect();
+      const elementCenterX = rect.left + rect.width / 2;
+      const elementCenterY = rect.top + rect.height / 2;
       
-      // Calculate escape direction (away from cursor)
-      const mouseX = e.clientX;
-      const mouseY = e.clientY;
-      
-      const deltaX = blobCenterX - mouseX;
-      const deltaY = blobCenterY - mouseY;
-      
-      // Normalize and amplify the escape distance
+      // Calculate distance from cursor to element center
+      const deltaX = elementCenterX - mouseX;
+      const deltaY = elementCenterY - mouseY;
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-      const escapeDistance = 100; // pixels to move away
       
-      if (distance > 0) {
-        const escapeX = (deltaX / distance) * escapeDistance;
-        const escapeY = (deltaY / distance) * escapeDistance;
+      // Define influence radius (how close cursor needs to be to affect the element)
+      const influenceRadius = 150;
+      
+      if (distance < influenceRadius && distance > 0) {
+        // Calculate movement intensity based on distance (closer = more movement)
+        const intensity = (influenceRadius - distance) / influenceRadius;
         
-        // Apply escape transformation
-        blob.classList.add('escaping');
-        blob.style.transform = `translate(${escapeX}px, ${escapeY}px) scale(1.1)`;
-      }
-    });
-    
-    // Mouse move - blob follows cursor avoidance
-    blob.addEventListener('mousemove', (e) => {
-      if (blob.classList.contains('escaping')) {
-        const blobRect = blob.getBoundingClientRect();
-        const blobCenterX = blobRect.left + blobRect.width / 2;
-        const blobCenterY = blobRect.top + blobRect.height / 2;
+        // Calculate gentle push away from cursor
+        const pushDistance = intensity * 30; // Maximum 30px movement
+        const pushX = (deltaX / distance) * pushDistance;
+        const pushY = (deltaY / distance) * pushDistance;
         
-        const mouseX = e.clientX;
-        const mouseY = e.clientY;
+        // Apply gentle movement with slight scale increase
+        const scaleIncrease = 1 + (intensity * 0.1); // Maximum 10% scale increase
+        element.style.transform = `translate(${pushX}px, ${pushY}px) scale(${scaleIncrease})`;
         
-        const deltaX = blobCenterX - mouseX;
-        const deltaY = blobCenterY - mouseY;
+        // Add slight glow effect when influenced
+        if (element.classList.contains('bubble')) {
+          element.style.background = `rgba(255, 255, 255, ${0.1 + intensity * 0.1})`;
+          element.style.borderColor = `rgba(255, 255, 255, ${0.2 + intensity * 0.2})`;
+        } else if (element.classList.contains('blob')) {
+          element.style.background = `linear-gradient(45deg, rgba(255, 255, 255, ${0.1 + intensity * 0.1}), rgba(255, 255, 255, ${0.05 + intensity * 0.05}))`;
+          element.style.borderColor = `rgba(255, 255, 255, ${0.15 + intensity * 0.15})`;
+        }
         
-        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-        const escapeDistance = Math.min(150, Math.max(50, 200 - distance));
+      } else {
+        // Return to original state when cursor is far away
+        element.style.transform = '';
         
-        if (distance > 0) {
-          const escapeX = (deltaX / distance) * escapeDistance;
-          const escapeY = (deltaY / distance) * escapeDistance;
-          
-          blob.style.transform = `translate(${escapeX}px, ${escapeY}px) scale(1.2)`;
+        // Reset appearance
+        if (element.classList.contains('bubble')) {
+          element.style.background = 'rgba(255, 255, 255, 0.1)';
+          element.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+        } else if (element.classList.contains('blob')) {
+          element.style.background = 'linear-gradient(45deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05))';
+          element.style.borderColor = 'rgba(255, 255, 255, 0.15)';
         }
       }
     });
-    
-    // Mouse leave - blob returns to original position
-    blob.addEventListener('mouseleave', () => {
-      blob.classList.remove('escaping');
-      blob.style.transform = '';
+  });
+  
+  // Reset all elements when mouse leaves the window
+  document.addEventListener('mouseleave', () => {
+    allElements.forEach((element) => {
+      element.style.transform = '';
       
-      // Add a gentle bounce back effect
-      setTimeout(() => {
-        blob.style.transition = 'transform 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
-        setTimeout(() => {
-          blob.style.transition = 'transform 0.3s ease-out';
-        }, 800);
-      }, 50);
-    });
-    
-    // Click effect - blob "pops" and moves to random position
-    blob.addEventListener('click', (e) => {
-      e.preventDefault();
-      
-      // Random new position within viewport bounds
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const blobWidth = blob.offsetWidth;
-      const blobHeight = blob.offsetHeight;
-      
-      const newLeft = Math.random() * (viewportWidth - blobWidth - 100) + 50;
-      const newTop = Math.random() * (viewportHeight - blobHeight - 100) + 50;
-      
-      // Convert to percentage for responsive positioning
-      const newLeftPercent = (newLeft / viewportWidth) * 100;
-      const newTopPercent = (newTop / viewportHeight) * 100;
-      
-      // Pop effect
-      blob.style.transform = 'scale(1.5)';
-      blob.style.transition = 'transform 0.2s ease-out';
-      
-      setTimeout(() => {
-        // Move to new position
-        blob.style.left = `${newLeftPercent}%`;
-        blob.style.top = `${newTopPercent}%`;
-        blob.style.transform = 'scale(0.8)';
-        blob.style.transition = 'all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
-        
-        setTimeout(() => {
-          blob.style.transform = '';
-          blob.style.transition = 'transform 0.3s ease-out';
-        }, 600);
-      }, 200);
+      // Reset appearance
+      if (element.classList.contains('bubble')) {
+        element.style.background = 'rgba(255, 255, 255, 0.1)';
+        element.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+      } else if (element.classList.contains('blob')) {
+        element.style.background = 'linear-gradient(45deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05))';
+        element.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+      }
     });
   });
 }
