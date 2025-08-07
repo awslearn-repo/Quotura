@@ -100,8 +100,23 @@ function generateSVGQuote(text, gradient, includeWatermark = true) {
   
   // Add watermark if requested
   if (includeWatermark) {
+    // Calculate watermark color based on background brightness
+    const endColorBrightness = getBrightness(gradient[1]);
+    let watermarkColor;
+    
+    if (endColorBrightness > 180) {
+      // Light background - use dark watermark
+      watermarkColor = "rgba(0,0,0,0.4)";
+    } else if (endColorBrightness > 120) {
+      // Medium background - use semi-dark watermark  
+      watermarkColor = "rgba(0,0,0,0.3)";
+    } else {
+      // Dark background - use light watermark
+      watermarkColor = "rgba(255,255,255,0.4)";
+    }
+    
     svgContent += `
-      <text x="790" y="390" font-family="Arial" font-size="12" fill="rgba(255,255,255,0.3)" text-anchor="end">made with Quotura</text>
+      <text x="785" y="385" font-family="Arial" font-size="16" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
     `;
   }
   
@@ -170,23 +185,45 @@ function getBrightness(hex) {
  * @param {string} text - The selected text to beautify
  */
 /**
- * Add watermark to the canvas
+ * Add watermark to the canvas with dynamic color based on background
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} width - Canvas width
  * @param {number} height - Canvas height
+ * @param {Array} gradient - The gradient colors for brightness calculation
  */
-function addWatermark(ctx, width, height) {
+function addWatermark(ctx, width, height, gradient = null) {
   // Save current context state
   ctx.save();
   
-  // Configure watermark styling
-  ctx.fillStyle = "rgba(255, 255, 255, 0.3)"; // Semi-transparent white
-  ctx.font = "12px Arial";
+  // Calculate background brightness for watermark color
+  let watermarkColor;
+  if (gradient && gradient.length >= 2) {
+    // Use the end color of gradient for better visibility
+    const endColorBrightness = getBrightness(gradient[1]);
+    
+    if (endColorBrightness > 180) {
+      // Light background - use dark watermark
+      watermarkColor = "rgba(0, 0, 0, 0.4)";
+    } else if (endColorBrightness > 120) {
+      // Medium background - use semi-dark watermark
+      watermarkColor = "rgba(0, 0, 0, 0.3)";
+    } else {
+      // Dark background - use light watermark
+      watermarkColor = "rgba(255, 255, 255, 0.4)";
+    }
+  } else {
+    // Fallback to white watermark
+    watermarkColor = "rgba(255, 255, 255, 0.3)";
+  }
+  
+  // Configure watermark styling - bigger and more visible
+  ctx.fillStyle = watermarkColor;
+  ctx.font = "16px Arial"; // Increased from 12px to 16px
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";
   
   // Add watermark text in bottom-right corner
-  ctx.fillText("made with Quotura", width - 10, height - 10);
+  ctx.fillText("made with Quotura", width - 15, height - 15);
   
   // Restore context state
   ctx.restore();
@@ -224,13 +261,13 @@ function generateQuoteImageDataWithGradient(text, selectedGradient, includeWater
     const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
     lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
 
-    // Add watermark if requested
-    if (includeWatermark) {
-      addWatermark(ctx, canvas.width, canvas.height);
-    }
+          // Add watermark if requested
+      if (includeWatermark) {
+        addWatermark(ctx, canvas.width, canvas.height, selected);
+      }
 
-    // Convert canvas to blob and resolve
-    canvas.convertToBlob().then((blob) => {
+      // Convert canvas to blob and resolve
+      canvas.convertToBlob().then((blob) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.readAsDataURL(blob);
@@ -287,7 +324,7 @@ function generateQuoteImageData(text, includeWatermark = true) {
 
       // Add watermark if requested
       if (includeWatermark) {
-        addWatermark(ctx, canvas.width, canvas.height);
+        addWatermark(ctx, canvas.width, canvas.height, selectedGradient);
       }
 
       // Convert canvas to blob and resolve
