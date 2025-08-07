@@ -23,10 +23,10 @@ chrome.contextMenus.onClicked.addListener((info) => {
 // Handle messages from preview tab for additional functionality
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "generateWithoutWatermark") {
-    // Get stored text and generate image without watermark
-    chrome.storage.local.get("quoteText", (data) => {
-      if (data.quoteText) {
-        generateQuoteImageData(data.quoteText, false).then((imageData) => {
+    // Get stored text and current gradient to maintain consistency
+    chrome.storage.local.get(["quoteText", "currentGradient"], (data) => {
+      if (data.quoteText && data.currentGradient) {
+        generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
           sendResponse({ imageData });
         });
       }
@@ -184,6 +184,52 @@ function addWatermark(ctx, width, height) {
   
   // Restore context state
   ctx.restore();
+}
+
+/**
+ * Generate quote image data with a specific gradient (maintains color consistency)
+ * @param {string} text - The selected text to beautify
+ * @param {Array} selectedGradient - The gradient colors to use
+ * @param {boolean} includeWatermark - Whether to include watermark
+ * @returns {Promise} Promise that resolves with image data
+ */
+function generateQuoteImageDataWithGradient(text, selectedGradient, includeWatermark = true) {
+  return new Promise((resolve) => {
+    // Create offscreen canvas for image generation (800x400 pixels)
+    const canvas = new OffscreenCanvas(800, 400);
+    const ctx = canvas.getContext("2d");
+
+    // Use the provided gradient
+    const gradient = ctx.createLinearGradient(0, 0, 800, 400);
+    gradient.addColorStop(0, selectedGradient[0]);
+    gradient.addColorStop(1, selectedGradient[1]);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 800, 400);
+
+    // Dynamic text color based on background brightness
+    const brightness = getBrightness(selectedGradient[0]);
+    ctx.fillStyle = brightness > 200 ? "#000000" : "#ffffff";
+    ctx.font = "bold 28px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const lines = wrapText(ctx, text, 720);
+    const lineHeight = 36;
+    const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+    lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
+
+    // Add watermark if requested
+    if (includeWatermark) {
+      addWatermark(ctx, canvas.width, canvas.height);
+    }
+
+    // Convert canvas to blob and resolve
+    canvas.convertToBlob().then((blob) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+  });
 }
 
 /**
