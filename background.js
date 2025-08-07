@@ -20,6 +20,91 @@ chrome.contextMenus.onClicked.addListener((info) => {
   }
 });
 
+// Handle messages from preview tab for additional functionality
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "generateWithoutWatermark") {
+    // Get stored text and generate image without watermark
+    chrome.storage.local.get("quoteText", (data) => {
+      if (data.quoteText) {
+        generateQuoteImageData(data.quoteText, false).then((imageData) => {
+          sendResponse({ imageData });
+        });
+      }
+    });
+    return true; // Keep message channel open for async response
+  }
+  
+  if (request.action === "generateSVG") {
+    // Generate SVG version of the quote
+    chrome.storage.local.get(["quoteText", "currentGradient"], (data) => {
+      if (data.quoteText) {
+        const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
+        sendResponse({ svgData });
+      }
+    });
+    return true; // Keep message channel open for async response
+  }
+});
+
+/**
+ * Generate SVG version of the quote
+ * @param {string} text - The quote text
+ * @param {Array} gradient - The gradient colors
+ * @param {boolean} includeWatermark - Whether to include watermark
+ * @returns {string} SVG data URL
+ */
+function generateSVGQuote(text, gradient, includeWatermark = true) {
+  // Create a temporary canvas to measure text
+  const canvas = new OffscreenCanvas(800, 400);
+  const ctx = canvas.getContext("2d");
+  ctx.font = "bold 28px Arial";
+  
+  // Wrap text using existing function
+  const lines = wrapText(ctx, text, 720);
+  const lineHeight = 36;
+  const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+  
+  // Determine text color based on gradient
+  const brightness = getBrightness(gradient[0]);
+  const textColor = brightness > 200 ? "#000000" : "#ffffff";
+  
+  // Generate SVG content
+  let svgContent = `
+    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${gradient[0]};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:${gradient[1]};stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      
+      <!-- Background -->
+      <rect width="800" height="400" fill="url(#bg-gradient)" />
+      
+      <!-- Text -->
+      <g font-family="Arial" font-weight="bold" font-size="28" fill="${textColor}" text-anchor="middle">
+  `;
+  
+  // Add each line of text
+  lines.forEach((line, i) => {
+    svgContent += `<text x="400" y="${startY + i * lineHeight}">${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text>\n`;
+  });
+  
+  svgContent += `</g>`;
+  
+  // Add watermark if requested
+  if (includeWatermark) {
+    svgContent += `
+      <text x="790" y="390" font-family="Arial" font-size="12" fill="rgba(255,255,255,0.3)" text-anchor="end">made with Quotura</text>
+    `;
+  }
+  
+  svgContent += `</svg>`;
+  
+  // Convert to data URL
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgContent);
+}
+
 /**
  * Text wrapping algorithm for canvas rendering
  * Breaks text into lines that fit within specified width constraints
@@ -78,51 +163,103 @@ function getBrightness(hex) {
  * Creates a canvas with gradient background and centered, wrapped text
  * @param {string} text - The selected text to beautify
  */
-function createQuoteImage(text) {
-  const canvas = new OffscreenCanvas(800, 400);
-  const ctx = canvas.getContext("2d");
+/**
+ * Add watermark to the canvas
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ */
+function addWatermark(ctx, width, height) {
+  // Save current context state
+  ctx.save();
+  
+  // Configure watermark styling
+  ctx.fillStyle = "rgba(255, 255, 255, 0.3)"; // Semi-transparent white
+  ctx.font = "12px Arial";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  
+  // Add watermark text in bottom-right corner
+  ctx.fillText("made with Quotura", width - 10, height - 10);
+  
+  // Restore context state
+  ctx.restore();
+}
 
-  // Random gradient backgrounds
-  const gradients = [
-    ["#4facfe", "#00f2fe"], // blue
-    ["#43e97b", "#38f9d7"], // green-teal
-    ["#fa709a", "#fee140"], // pink-yellow
-    ["#30cfd0", "#330867"], // teal-purple
-    ["#ff9a9e", "#fad0c4"], // soft pink
-    ["#a1c4fd", "#c2e9fb"], // sky blue
-    ["#667eea", "#764ba2"], // violet
-    ["#fddb92", "#d1fdff"], // pastel
-  ];
-  const selected = gradients[Math.floor(Math.random() * gradients.length)];
-  const gradient = ctx.createLinearGradient(0, 0, 800, 400);
-  gradient.addColorStop(0, selected[0]);
-  gradient.addColorStop(1, selected[1]);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 800, 400);
+/**
+ * Generate quote image data (used for both watermarked and non-watermarked versions)
+ * @param {string} text - The selected text to beautify
+ * @param {boolean} includeWatermark - Whether to include watermark
+ * @returns {Promise} Promise that resolves with image data
+ */
+function generateQuoteImageData(text, includeWatermark = true) {
+  return new Promise((resolve) => {
+    // Create offscreen canvas for image generation (800x400 pixels)
+    const canvas = new OffscreenCanvas(800, 400);
+    const ctx = canvas.getContext("2d");
 
-  // Dynamic text color based on background brightness
-  const brightness = getBrightness(selected[0]);
-  ctx.fillStyle = brightness > 200 ? "#000000" : "#ffffff";
-  ctx.font = "bold 28px Arial";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+    // Random gradient backgrounds
+    const gradients = [
+      ["#4facfe", "#00f2fe"], // blue
+      ["#43e97b", "#38f9d7"], // green-teal
+      ["#fa709a", "#fee140"], // pink-yellow
+      ["#30cfd0", "#330867"], // teal-purple
+      ["#ff9a9e", "#fad0c4"], // soft pink
+      ["#a1c4fd", "#c2e9fb"], // sky blue
+      ["#667eea", "#764ba2"], // violet
+      ["#fddb92", "#d1fdff"], // pastel
+    ];
+    
+    // Use stored gradient or select randomly
+    let selected;
+    chrome.storage.local.get("currentGradient", (data) => {
+      if (data.currentGradient) {
+        selected = data.currentGradient;
+      } else {
+        selected = gradients[Math.floor(Math.random() * gradients.length)];
+        chrome.storage.local.set({ currentGradient: selected });
+      }
+      
+      const gradient = ctx.createLinearGradient(0, 0, 800, 400);
+      gradient.addColorStop(0, selected[0]);
+      gradient.addColorStop(1, selected[1]);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 800, 400);
 
-  const lines = wrapText(ctx, text, 720);
-  const lineHeight = 36;
-  const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
-  lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
+      // Dynamic text color based on background brightness
+      const brightness = getBrightness(selected[0]);
+      ctx.fillStyle = brightness > 200 ? "#000000" : "#ffffff";
+      ctx.font = "bold 28px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
 
-  canvas.convertToBlob().then((blob) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      // Save image data in chrome storage for preview tab
-      chrome.storage.local.set({ quoteImage: reader.result });
-      // Download the image
-      chrome.downloads.download({
-        url: reader.result,
-        filename: "quote.png",
+      const lines = wrapText(ctx, text, 720);
+      const lineHeight = 36;
+      const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+      lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
+
+      // Add watermark if requested
+      if (includeWatermark) {
+        addWatermark(ctx, canvas.width, canvas.height);
+      }
+
+      // Convert canvas to blob and resolve
+      canvas.convertToBlob().then((blob) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
       });
-    };
-    reader.readAsDataURL(blob);
+    });
+  });
+}
+
+function createQuoteImage(text) {
+  // Store the original text for later use
+  chrome.storage.local.set({ quoteText: text });
+  
+  // Generate image with watermark by default, but don't auto-download
+  generateQuoteImageData(text, true).then((imageData) => {
+    // Only save image data in Chrome storage for preview tab access
+    chrome.storage.local.set({ quoteImage: imageData });
   });
 }

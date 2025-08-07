@@ -29,35 +29,105 @@
         box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
       }
       
-      /* Download button styling */
-      #downloadBtn {
+      /* Export buttons container */
+      .export-buttons {
         margin-top: 20px;
-        padding: 10px 20px;
-        font-size: 16px;
-        background-color: #4facfe;     /* Matches extension's blue theme */
-        color: white;
-        border: none;
-        border-radius: 5px;            /* Rounded corners for modern look */
-        cursor: pointer;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        max-width: 600px;
       }
       
-      /* Button hover effect */
-      #downloadBtn:hover {
-        background-color: #00f2fe;     /* Lighter blue on hover */
+      /* Base button styling */
+      .export-btn {
+        padding: 12px 20px;
+        font-size: 14px;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        min-width: 140px;
+        font-weight: 500;
+      }
+      
+      /* Primary button (PNG download) */
+      .btn-primary {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      }
+      
+      .btn-primary:hover {
+        background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+      }
+      
+      /* Secondary button (SVG download) */
+      .btn-secondary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      }
+      
+      .btn-secondary:hover {
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+      
+      /* Success button (copy to clipboard) */
+      .btn-success {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+      }
+      
+      .btn-success:hover {
+        background: linear-gradient(135deg, #38f9d7 0%, #43e97b 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(67, 233, 123, 0.4);
+      }
+      
+      /* Warning button (remove watermark) */
+      .btn-warning {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        color: #333;
+      }
+      
+      .btn-warning:hover {
+        background: linear-gradient(135deg, #fee140 0%, #fa709a 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(250, 112, 154, 0.4);
+      }
+      
+      /* Disabled state */
+      .export-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
+      }
+      
+      /* Loading state */
+      .btn-loading {
+        opacity: 0.7;
+        cursor: wait;
       }
     </style>
   </head>
   <body>
     <!-- Status message - updated by JavaScript based on image availability -->
     <div id="message">
-      This beautified text has been downloaded to your Downloads folder.
+      Your beautified quote is ready!
     </div>
     
     <!-- Container for the generated quote image -->
     <img id="image" src="" alt="Beautified Quote" />
     
-    <!-- Button to re-download the image if needed -->
-    <button id="downloadBtn">Download Again</button>
+    <!-- Export buttons for various download options -->
+    <div class="export-buttons">
+      <button id="downloadPngBtn" class="export-btn btn-primary">📥 Download PNG</button>
+      <button id="downloadSvgBtn" class="export-btn btn-secondary">📄 Download SVG</button>
+      <button id="copyImageBtn" class="export-btn btn-success">📋 Copy to Clipboard</button>
+      <button id="removeWatermarkBtn" class="export-btn btn-warning">🚫 Remove Watermark</button>
+    </div>
 
     <!-- External JS file to comply with CSP (Content Security Policy) -->
     <!-- Inline scripts are not allowed in Chrome extensions for security -->
