@@ -20,24 +20,35 @@ document.addEventListener("DOMContentLoaded", () => {
    * Initialize the preview page by loading the generated image
    */
   function initializePreview() {
-    // Retrieve the generated quote image from Chrome's local storage
-    // This was stored by background.js after image generation
-    chrome.storage.local.get("quoteImage", (data) => {
-      if (data.quoteImage) {
-        // Image found - display it and update status message
-        currentImageData = data.quoteImage;
-        img.src = data.quoteImage;                    // Set image source to data URL
-        msg.textContent = "Your beautified quote is ready!";
-        
-        // Enable export buttons
-        enableExportButtons();
-      } else {
-        // No image found - show error message
-        // This shouldn't normally happen if user follows proper workflow
-        msg.textContent = "No image found!";
-        disableExportButtons();
-      }
-    });
+    // Reset state variables
+    currentImageData = null;
+    watermarkRemoved = false;
+    
+    // Clear any previous image to avoid showing stale data
+    img.src = "";
+    msg.textContent = "Generating your beautiful quote...";
+    disableExportButtons();
+    
+    // Wait a bit for the background script to generate the new image
+    const checkForImage = () => {
+      chrome.storage.local.get("quoteImage", (data) => {
+        if (data.quoteImage) {
+          // Image found - display it and update status message
+          currentImageData = data.quoteImage;
+          img.src = data.quoteImage;                    // Set image source to data URL
+          msg.textContent = "Your beautified quote is ready!";
+          
+          // Enable export buttons
+          enableExportButtons();
+        } else {
+          // No image found yet - retry after a short delay
+          setTimeout(checkForImage, 100);
+        }
+      });
+    };
+    
+    // Start checking for the image
+    checkForImage();
   }
   
   /**
