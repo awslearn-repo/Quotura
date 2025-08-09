@@ -100,8 +100,23 @@ function generateSVGQuote(text, gradient, includeWatermark = true) {
   
   // Add watermark if requested
   if (includeWatermark) {
+    // Calculate average brightness for smart watermark color
+    const startBrightness = getBrightness(gradient[0]);
+    const endBrightness = getBrightness(gradient[1]);
+    const avgBrightness = (startBrightness + endBrightness) / 2;
+    
+    // Choose watermark color based on background brightness
+    let watermarkColor;
+    if (avgBrightness > 150) {
+      // Light background - use dark watermark
+      watermarkColor = "rgba(0,0,0,0.6)";
+    } else {
+      // Dark background - use light watermark
+      watermarkColor = "rgba(255,255,255,0.6)";
+    }
+    
     svgContent += `
-      <text x="790" y="390" font-family="Arial" font-size="12" fill="rgba(255,255,255,0.3)" text-anchor="end">made with Quotura</text>
+      <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
     `;
   }
   
@@ -170,23 +185,39 @@ function getBrightness(hex) {
  * @param {string} text - The selected text to beautify
  */
 /**
- * Add watermark to the canvas
+ * Add watermark to the canvas with adaptive color
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} width - Canvas width
  * @param {number} height - Canvas height
+ * @param {Array} gradient - The gradient colors for brightness calculation
  */
-function addWatermark(ctx, width, height) {
+function addWatermark(ctx, width, height, gradient) {
   // Save current context state
   ctx.save();
   
-  // Configure watermark styling
-  ctx.fillStyle = "rgba(255, 255, 255, 0.3)"; // Semi-transparent white
-  ctx.font = "12px Arial";
+  // Calculate average brightness of the gradient for smart color choice
+  const startBrightness = getBrightness(gradient[0]);
+  const endBrightness = getBrightness(gradient[1]);
+  const avgBrightness = (startBrightness + endBrightness) / 2;
+  
+  // Choose watermark color based on background brightness
+  let watermarkColor;
+  if (avgBrightness > 150) {
+    // Light background - use dark watermark
+    watermarkColor = "rgba(0, 0, 0, 0.6)";
+  } else {
+    // Dark background - use light watermark
+    watermarkColor = "rgba(255, 255, 255, 0.6)";
+  }
+  
+  // Configure watermark styling - bigger and more prominent
+  ctx.fillStyle = watermarkColor;
+  ctx.font = "bold 16px Arial"; // Increased size and made bold
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";
   
   // Add watermark text in bottom-right corner
-  ctx.fillText("made with Quotura", width - 10, height - 10);
+  ctx.fillText("made with Quotura", width - 15, height - 15);
   
   // Restore context state
   ctx.restore();
@@ -224,10 +255,10 @@ function generateQuoteImageDataWithGradient(text, selectedGradient, includeWater
     const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
     lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
 
-                // Add watermark if requested
-      if (includeWatermark) {
-        addWatermark(ctx, canvas.width, canvas.height);
-      }
+    // Add watermark if requested
+    if (includeWatermark) {
+      addWatermark(ctx, canvas.width, canvas.height, selectedGradient);
+    }
 
       // Convert canvas to blob and resolve
       canvas.convertToBlob().then((blob) => {
@@ -287,7 +318,7 @@ function generateQuoteImageData(text, includeWatermark = true) {
 
       // Add watermark if requested
       if (includeWatermark) {
-        addWatermark(ctx, canvas.width, canvas.height);
+        addWatermark(ctx, canvas.width, canvas.height, selected);
       }
 
       // Convert canvas to blob and resolve
