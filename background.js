@@ -185,6 +185,69 @@ function getBrightness(hex) {
  * @param {string} text - The selected text to beautify
  */
 /**
+ * Add subtle decorative pattern to enhance the background
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ * @param {Array} gradient - The gradient colors for pattern styling
+ */
+function addSubtlePattern(ctx, width, height, gradient) {
+  // Save current context state
+  ctx.save();
+  
+  // Calculate brightness for pattern opacity
+  const startBrightness = getBrightness(gradient[0]);
+  const endBrightness = getBrightness(gradient[1]);
+  const avgBrightness = (startBrightness + endBrightness) / 2;
+  
+  // Very subtle opacity based on background brightness
+  const patternOpacity = avgBrightness > 150 ? 0.03 : 0.05;
+  
+  // Create subtle geometric pattern
+  ctx.globalAlpha = patternOpacity;
+  
+  // Pattern 1: Gentle circular dots
+  const dotColor = avgBrightness > 150 ? "#000000" : "#ffffff";
+  ctx.fillStyle = dotColor;
+  
+  for (let x = 50; x < width; x += 80) {
+    for (let y = 50; y < height; y += 80) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }
+  
+  // Pattern 2: Diagonal subtle lines
+  ctx.strokeStyle = dotColor;
+  ctx.lineWidth = 0.5;
+  ctx.globalAlpha = patternOpacity * 0.5;
+  
+  for (let i = 0; i < width + height; i += 120) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i - height, height);
+    ctx.stroke();
+  }
+  
+  // Pattern 3: Soft geometric shapes in corners
+  ctx.globalAlpha = patternOpacity * 0.7;
+  
+  // Top-left corner decoration
+  ctx.beginPath();
+  ctx.arc(0, 0, 100, 0, Math.PI / 2);
+  ctx.stroke();
+  
+  // Bottom-right corner decoration
+  ctx.beginPath();
+  ctx.arc(width, height, 100, Math.PI, 3 * Math.PI / 2);
+  ctx.stroke();
+  
+  // Restore context state
+  ctx.restore();
+}
+
+/**
  * Add watermark to the canvas with adaptive color
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} width - Canvas width
@@ -242,6 +305,9 @@ function generateQuoteImageDataWithGradient(text, selectedGradient, includeWater
     gradient.addColorStop(1, selectedGradient[1]);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 800, 400);
+
+    // Add subtle decorative pattern overlay
+    addSubtlePattern(ctx, 800, 400, selectedGradient);
 
     // Dynamic text color based on background brightness
     const brightness = getBrightness(selectedGradient[0]);
@@ -304,6 +370,9 @@ function generateQuoteImageData(text, includeWatermark = true) {
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, 800, 400);
 
+      // Add subtle decorative pattern overlay
+      addSubtlePattern(ctx, 800, 400, selected);
+
       // Dynamic text color based on background brightness
       const brightness = getBrightness(selected[0]);
       ctx.fillStyle = brightness > 200 ? "#000000" : "#ffffff";
@@ -329,6 +398,121 @@ function generateQuoteImageData(text, includeWatermark = true) {
       });
   });
 }
+
+/**
+ * Generate SVG version of the quote with decorative patterns
+ * @param {string} text - The text to display
+ * @param {Array} gradient - Gradient colors for background
+ * @param {boolean} includeWatermark - Whether to include watermark
+ * @returns {string} SVG data URL
+ */
+function generateSVGQuote(text, gradient, includeWatermark = true) {
+  // Calculate brightness for pattern styling
+  const startBrightness = getBrightness(gradient[0]);
+  const endBrightness = getBrightness(gradient[1]);
+  const avgBrightness = (startBrightness + endBrightness) / 2;
+  
+  // Very subtle opacity based on background brightness
+  const patternOpacity = avgBrightness > 150 ? 0.03 : 0.05;
+  const patternColor = avgBrightness > 150 ? "#000000" : "#ffffff";
+
+  // Dynamic text color based on background brightness
+  const textColor = avgBrightness > 200 ? "#000000" : "#ffffff";
+  
+  // Wrap text for SVG (using a temporary canvas context)
+  const tempCanvas = new OffscreenCanvas(800, 400);
+  const tempCtx = tempCanvas.getContext("2d");
+  tempCtx.font = "bold 32px Arial";
+  const wrappedLines = wrapText(tempCtx, text, 720);
+  
+  const lineHeight = 40;
+  const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
+
+  // Create SVG content with gradient background, subtle pattern, and text
+  let svgContent = `
+    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${gradient[0]};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:${gradient[1]};stop-opacity:1" />
+        </linearGradient>
+        <pattern id="subtlePattern" patternUnits="userSpaceOnUse" width="80" height="80">
+          <circle cx="40" cy="40" r="2" fill="${patternColor}" opacity="${patternOpacity}" />
+        </pattern>
+      </defs>
+      
+      <rect width="800" height="400" fill="url(#bgGradient)" />
+      <rect width="800" height="400" fill="url(#subtlePattern)" />
+      
+      <!-- Subtle diagonal lines -->
+      <g stroke="${patternColor}" stroke-width="0.5" opacity="${patternOpacity * 0.5}">
+        ${Array.from({length: 10}, (_, i) => {
+          const x = i * 120;
+          return `<line x1="${x}" y1="0" x2="${x - 400}" y2="400" />`;
+        }).join('\n        ')}
+      </g>
+      
+      <!-- Corner decorations -->
+      <g stroke="${patternColor}" stroke-width="1" fill="none" opacity="${patternOpacity * 0.7}">
+        <path d="M 0,100 A 100,100 0 0,1 100,0" />
+        <path d="M 700,400 A 100,100 0 0,1 800,300" />
+      </g>
+      
+      ${wrappedLines.map((line, index) => {
+        const y = startY + index * lineHeight;
+        return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="${textColor}">${line}</text>`;
+      }).join('\n      ')}
+    `;
+  
+  // Add watermark if requested
+  if (includeWatermark) {
+    // Calculate average brightness for smart watermark color
+    const watermarkColor = avgBrightness > 150 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
+    
+    svgContent += `
+      <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
+    `;
+  }
+  
+  svgContent += `
+    </svg>
+  `;
+  
+  // Convert to data URL
+  return `data:image/svg+xml;base64,${btoa(svgContent)}`;
+}
+
+// Message listener for handling requests from preview.js
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "generateWithoutWatermark") {
+    // Small delay to ensure currentGradient is properly stored
+    setTimeout(() => {
+      chrome.storage.local.get(["quoteText", "currentGradient"], (data) => {
+        if (data.quoteText && data.currentGradient) {
+          generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
+            sendResponse({ imageData: imageData });
+          });
+        } else if (data.quoteText) {
+          // Fallback: regenerate with a random gradient if currentGradient is missing
+          generateQuoteImageData(data.quoteText, false).then((imageData) => {
+            sendResponse({ imageData: imageData });
+          });
+        }
+      });
+    }, 200);
+    return true; // Keep the message channel open for async response
+  }
+  
+  if (request.action === "generateSVG") {
+    chrome.storage.local.get(["quoteText", "currentGradient"], (data) => {
+      if (data.quoteText && data.currentGradient) {
+        const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
+        sendResponse({ svgData: svgData });
+      }
+    });
+    return true; // Keep the message channel open for async response
+  }
+});
 
 function createQuoteImage(text) {
   // Clear old image data first to prevent showing stale content
