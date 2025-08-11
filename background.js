@@ -200,47 +200,67 @@ function addSubtlePattern(ctx, width, height, gradient) {
   const endBrightness = getBrightness(gradient[1]);
   const avgBrightness = (startBrightness + endBrightness) / 2;
   
-  // Very subtle opacity based on background brightness
-  const patternOpacity = avgBrightness > 150 ? 0.03 : 0.05;
+  // More visible opacity based on background brightness
+  const patternOpacity = avgBrightness > 150 ? 0.12 : 0.15;
   
   // Create subtle geometric pattern
   ctx.globalAlpha = patternOpacity;
   
-  // Pattern 1: Gentle circular dots
+  // Pattern 1: Enhanced circular dots with variation
   const dotColor = avgBrightness > 150 ? "#000000" : "#ffffff";
   ctx.fillStyle = dotColor;
   
-  for (let x = 50; x < width; x += 80) {
-    for (let y = 50; y < height; y += 80) {
+  for (let x = 60; x < width; x += 100) {
+    for (let y = 60; y < height; y += 100) {
       ctx.beginPath();
-      ctx.arc(x, y, 2, 0, 2 * Math.PI);
+      ctx.arc(x, y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // Add smaller accent dots
+      ctx.beginPath();
+      ctx.arc(x + 25, y + 25, 1.5, 0, 2 * Math.PI);
       ctx.fill();
     }
   }
   
-  // Pattern 2: Diagonal subtle lines
+  // Pattern 2: Enhanced diagonal lines
   ctx.strokeStyle = dotColor;
-  ctx.lineWidth = 0.5;
-  ctx.globalAlpha = patternOpacity * 0.5;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = patternOpacity * 0.6;
   
-  for (let i = 0; i < width + height; i += 120) {
+  for (let i = 0; i < width + height; i += 150) {
     ctx.beginPath();
     ctx.moveTo(i, 0);
     ctx.lineTo(i - height, height);
     ctx.stroke();
+    
+    // Add subtle cross-hatch lines
+    ctx.globalAlpha = patternOpacity * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(i + 75, 0);
+    ctx.lineTo(i + 75 + height, height);
+    ctx.stroke();
+    ctx.globalAlpha = patternOpacity * 0.6;
   }
   
-  // Pattern 3: Soft geometric shapes in corners
-  ctx.globalAlpha = patternOpacity * 0.7;
+  // Pattern 3: Enhanced corner decorations
+  ctx.globalAlpha = patternOpacity * 0.8;
+  ctx.lineWidth = 2;
   
-  // Top-left corner decoration
+  // Top-left corner decoration - multiple arcs
   ctx.beginPath();
-  ctx.arc(0, 0, 100, 0, Math.PI / 2);
+  ctx.arc(0, 0, 80, 0, Math.PI / 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, 120, 0, Math.PI / 2);
   ctx.stroke();
   
-  // Bottom-right corner decoration
+  // Bottom-right corner decoration - multiple arcs
   ctx.beginPath();
-  ctx.arc(width, height, 100, Math.PI, 3 * Math.PI / 2);
+  ctx.arc(width, height, 80, Math.PI, 3 * Math.PI / 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(width, height, 120, Math.PI, 3 * Math.PI / 2);
   ctx.stroke();
   
   // Restore context state
@@ -412,8 +432,8 @@ function generateSVGQuote(text, gradient, includeWatermark = true) {
   const endBrightness = getBrightness(gradient[1]);
   const avgBrightness = (startBrightness + endBrightness) / 2;
   
-  // Very subtle opacity based on background brightness
-  const patternOpacity = avgBrightness > 150 ? 0.03 : 0.05;
+  // More visible opacity based on background brightness
+  const patternOpacity = avgBrightness > 150 ? 0.12 : 0.15;
   const patternColor = avgBrightness > 150 ? "#000000" : "#ffffff";
 
   // Dynamic text color based on background brightness
@@ -436,27 +456,36 @@ function generateSVGQuote(text, gradient, includeWatermark = true) {
           <stop offset="0%" style="stop-color:${gradient[0]};stop-opacity:1" />
           <stop offset="100%" style="stop-color:${gradient[1]};stop-opacity:1" />
         </linearGradient>
-        <pattern id="subtlePattern" patternUnits="userSpaceOnUse" width="80" height="80">
-          <circle cx="40" cy="40" r="2" fill="${patternColor}" opacity="${patternOpacity}" />
+        <pattern id="subtlePattern" patternUnits="userSpaceOnUse" width="100" height="100">
+          <circle cx="50" cy="50" r="3" fill="${patternColor}" opacity="${patternOpacity}" />
+          <circle cx="75" cy="75" r="1.5" fill="${patternColor}" opacity="${patternOpacity}" />
         </pattern>
       </defs>
       
       <rect width="800" height="400" fill="url(#bgGradient)" />
       <rect width="800" height="400" fill="url(#subtlePattern)" />
       
-      <!-- Subtle diagonal lines -->
-      <g stroke="${patternColor}" stroke-width="0.5" opacity="${patternOpacity * 0.5}">
-        ${Array.from({length: 10}, (_, i) => {
-          const x = i * 120;
-          return `<line x1="${x}" y1="0" x2="${x - 400}" y2="400" />`;
-        }).join('\n        ')}
-      </g>
+             <!-- Enhanced diagonal lines -->
+       <g stroke="${patternColor}" stroke-width="1" opacity="${patternOpacity * 0.6}">
+         ${Array.from({length: 8}, (_, i) => {
+           const x = i * 150;
+           return `<line x1="${x}" y1="0" x2="${x - 400}" y2="400" />`;
+         }).join('\n        ')}
+       </g>
+       <g stroke="${patternColor}" stroke-width="1" opacity="${patternOpacity * 0.3}">
+         ${Array.from({length: 8}, (_, i) => {
+           const x = i * 150 + 75;
+           return `<line x1="${x}" y1="0" x2="${x + 400}" y2="400" />`;
+         }).join('\n        ')}
+       </g>
       
-      <!-- Corner decorations -->
-      <g stroke="${patternColor}" stroke-width="1" fill="none" opacity="${patternOpacity * 0.7}">
-        <path d="M 0,100 A 100,100 0 0,1 100,0" />
-        <path d="M 700,400 A 100,100 0 0,1 800,300" />
-      </g>
+             <!-- Enhanced corner decorations -->
+       <g stroke="${patternColor}" stroke-width="2" fill="none" opacity="${patternOpacity * 0.8}">
+         <path d="M 0,80 A 80,80 0 0,1 80,0" />
+         <path d="M 0,120 A 120,120 0 0,1 120,0" />
+         <path d="M 720,400 A 80,80 0 0,1 800,320" />
+         <path d="M 680,400 A 120,120 0 0,1 800,280" />
+       </g>
       
       ${wrappedLines.map((line, index) => {
         const y = startY + index * lineHeight;
