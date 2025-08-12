@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <title>Quotura Preview</title>
+    
+    <!-- Google Fonts for quote typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand+SC&family=Playfair+Display:wght@400;700&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
     <style>
       /* Main layout - vertical flex container with beautiful background */
       body {
@@ -392,6 +397,55 @@
         opacity: 0.7;
         cursor: wait;
       }
+      
+      /* Font selector styling */
+      .font-selector {
+        margin: 20px 0;
+        text-align: center;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      }
+      
+      .font-selector label {
+        display: block;
+        margin-bottom: 10px;
+        color: white;
+        font-weight: bold;
+        font-size: 16px;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      
+      .font-selector select {
+        padding: 12px 20px;
+        border-radius: 25px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.9);
+        color: #333;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        outline: none;
+        transition: all 0.3s ease;
+        min-width: 280px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      }
+      
+      .font-selector select:hover {
+        border-color: rgba(255, 255, 255, 0.5);
+        background: rgba(255, 255, 255, 1);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+      }
+      
+      .font-selector select:focus {
+        border-color: #667eea;
+        background: rgba(255, 255, 255, 1);
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+      }
     </style>
   </head>
   <body>
@@ -417,6 +471,18 @@
     <!-- Status message - updated by JavaScript based on image availability -->
     <div id="message">
       Your beautified quote is ready!
+    </div>
+    
+    <!-- Font Selection Dropdown -->
+    <div class="font-selector">
+      <label for="fontSelect">Choose Font:</label>
+      <select id="fontSelect">
+        <option value="Arial" selected>Arial - Clean & Professional</option>
+        <option value="Impact">Impact - Bold & Strong</option>
+        <option value="Patrick Hand SC">Patrick Hand SC - Handwritten Style</option>
+        <option value="Playfair Display">Playfair Display - Elegant Serif</option>
+        <option value="Oswald">Oswald - Modern Sans-Serif</option>
+      </select>
     </div>
     
     <!-- Container for the generated quote image -->

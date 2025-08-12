@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const downloadSvgBtn = document.getElementById("downloadSvgBtn"); // SVG download button
   const copyImageBtn = document.getElementById("copyImageBtn");     // Copy to clipboard button
   const removeWatermarkBtn = document.getElementById("removeWatermarkBtn"); // Remove watermark button
+  const fontSelect = document.getElementById("fontSelect");         // Font selection dropdown
   
   // State variables
   let currentImageData = null;
@@ -15,6 +16,9 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Initialize the preview page
   initializePreview();
+  
+  // Load saved font preference
+  loadFontPreference();
   
   /**
    * Initialize the preview page by loading the generated image
@@ -251,11 +255,63 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 3000);
   }
   
-  // Event listeners for export buttons
+  /**
+   * Handle font change selection
+   */
+  function handleFontChange() {
+    const selectedFont = fontSelect.value;
+    
+    // Store the selected font preference
+    chrome.storage.local.set({ selectedFont: selectedFont });
+    
+    // Show loading message
+    msg.textContent = "Regenerating with new font...";
+    disableExportButtons();
+    
+    // Request regeneration with new font
+    chrome.storage.local.get(["quoteText"], (data) => {
+      if (data.quoteText) {
+        chrome.runtime.sendMessage({
+          action: "regenerateWithFont",
+          text: data.quoteText,
+          font: selectedFont,
+          includeWatermark: !watermarkRemoved
+        }, (response) => {
+          if (response && response.imageData) {
+            currentImageData = response.imageData;
+            img.src = response.imageData;
+            msg.textContent = "Font updated successfully!";
+            enableExportButtons();
+            
+            showNotification("Font changed successfully!", "success");
+          } else {
+            msg.textContent = "Failed to change font";
+            showNotification("Failed to change font", "error");
+          }
+        });
+      }
+         });
+   }
+   
+   /**
+    * Load saved font preference and update dropdown
+    */
+   function loadFontPreference() {
+     chrome.storage.local.get(["selectedFont"], (data) => {
+       if (data.selectedFont) {
+         fontSelect.value = data.selectedFont;
+       }
+     });
+   }
+   
+   // Event listeners for export buttons
   downloadPngBtn.addEventListener("click", downloadPNG);
   downloadSvgBtn.addEventListener("click", downloadSVG);
   copyImageBtn.addEventListener("click", copyToClipboard);
   removeWatermarkBtn.addEventListener("click", removeWatermark);
+  
+  // Event listener for font selection
+  fontSelect.addEventListener("change", handleFontChange);
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
