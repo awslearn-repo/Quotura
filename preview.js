@@ -11,7 +11,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const quickEditBtn = document.getElementById("quickEditBtn");             // Quick edit button
   const editPanel = document.getElementById("editPanel");                   // Edit panel container
   const fontBtn = document.getElementById("fontBtn");                       // Font selection button
-  const fontSizeBtn = document.getElementById("fontSizeBtn");               // Font size button
+  const decreaseSizeBtn = document.getElementById("decreaseSizeBtn");       // Decrease size button
+  const increaseSizeBtn = document.getElementById("increaseSizeBtn");       // Increase size button
+  const currentSizeDisplay = document.getElementById("currentSize");        // Current size display
   const doneBtn = document.getElementById("doneBtn");                       // Done button
   
   // State variables
@@ -299,30 +301,40 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   
   /**
-   * Handle font size change
+   * Handle font size increase/decrease
    */
-  function handleFontSizeChange() {
-    const sizes = [
-      { size: 20, display: "Small (20px)" },
-      { size: 24, display: "Medium Small (24px)" },
-      { size: 28, display: "Medium (28px) - Default" },
-      { size: 32, display: "Medium Large (32px)" },
-      { size: 36, display: "Large (36px)" },
-      { size: 40, display: "Extra Large (40px)" }
-    ];
+  function handleSizeChange(delta) {
+    const newSize = currentFontSize + delta;
     
-    let sizeList = "Choose font size:\n\n";
-    sizes.forEach((size, index) => {
-      sizeList += `${index + 1}. ${size.display}\n`;
-    });
-    
-    const choice = prompt(sizeList + "\nEnter number (1-6):");
-    const sizeIndex = parseInt(choice) - 1;
-    
-    if (sizeIndex >= 0 && sizeIndex < sizes.length) {
-      currentFontSize = sizes[sizeIndex].size;
+    // Constrain size between 12px and 60px
+    if (newSize >= 12 && newSize <= 60) {
+      currentFontSize = newSize;
+      
+      // Update display with animation
+      currentSizeDisplay.classList.add("updating");
+      currentSizeDisplay.textContent = currentFontSize;
+      
+      setTimeout(() => {
+        currentSizeDisplay.classList.remove("updating");
+      }, 300);
+      
+      // Regenerate image with new size
       regenerateWithSettings();
-      showNotification(`Font size changed to ${sizes[sizeIndex].size}px!`, "success");
+      
+      // Show subtle notification
+      const action = delta > 0 ? "increased" : "decreased";
+      showNotification(`Font size ${action} to ${currentFontSize}px!`, "success");
+    } else {
+      // Show size limit notification
+      const limit = newSize < 12 ? "minimum" : "maximum";
+      const limitValue = newSize < 12 ? "12px" : "60px";
+      showNotification(`${limit} font size is ${limitValue}`, "error");
+      
+      // Brief shake animation for feedback
+      currentSizeDisplay.style.animation = "shake 0.3s ease-in-out";
+      setTimeout(() => {
+        currentSizeDisplay.style.animation = "";
+      }, 300);
     }
   }
   
@@ -384,7 +396,8 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Event listeners for edit panel
   fontBtn.addEventListener("click", handleFontChange);
-  fontSizeBtn.addEventListener("click", handleFontSizeChange);
+  decreaseSizeBtn.addEventListener("click", () => handleSizeChange(-2));
+  increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
   doneBtn.addEventListener("click", handleDone);
   
   // Interactive blob functionality
