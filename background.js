@@ -32,6 +32,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } else {
         // Fallback: if no gradient stored, use the original function (shouldn't happen)
         console.warn("No currentGradient found, using fallback");
+        // This fallback ensures the extension continues working even if gradient data is lost
         generateQuoteImageData(data.quoteText, false).then((imageData) => {
           sendResponse({ imageData });
         });
