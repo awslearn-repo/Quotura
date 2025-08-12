@@ -9,10 +9,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const copyImageBtn = document.getElementById("copyImageBtn");     // Copy to clipboard button
   const removeWatermarkBtn = document.getElementById("removeWatermarkBtn"); // Remove watermark button
   const quickEditBtn = document.getElementById("quickEditBtn");             // Quick edit button
+  const editPanel = document.getElementById("editPanel");                   // Edit panel container
+  const fontBtn = document.getElementById("fontBtn");                       // Font selection button
+  const fontSizeBtn = document.getElementById("fontSizeBtn");               // Font size button
+  const doneBtn = document.getElementById("doneBtn");                       // Done button
   
   // State variables
   let currentImageData = null;
   let watermarkRemoved = false;
+  let editMode = false;
+  let currentFont = "Arial";
+  let currentFontSize = 28;
   
   // Initialize the preview page
   initializePreview();
@@ -253,45 +260,117 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   
     /**
-   * Handle Quick Edit button click
+   * Handle Quick Edit button click - shows edit panel
    */
   function handleQuickEdit() {
+    if (!editMode) {
+      // Enter edit mode - show panel
+      editMode = true;
+      editPanel.classList.add("active");
+      quickEditBtn.style.opacity = "0.7";
+    }
+  }
+  
+  /**
+   * Handle font selection
+   */
+  function handleFontChange() {
+    const fonts = [
+      { name: "Arial", display: "Arial - Clean & Professional" },
+      { name: "Impact", display: "Impact - Bold & Strong" },
+      { name: "Georgia", display: "Georgia - Elegant Serif" },
+      { name: "Trebuchet MS", display: "Trebuchet MS - Modern Sans" },
+      { name: "Courier New", display: "Courier New - Monospace" }
+    ];
+    
+    let fontList = "Choose a font:\n\n";
+    fonts.forEach((font, index) => {
+      fontList += `${index + 1}. ${font.display}\n`;
+    });
+    
+    const choice = prompt(fontList + "\nEnter number (1-5):");
+    const fontIndex = parseInt(choice) - 1;
+    
+    if (fontIndex >= 0 && fontIndex < fonts.length) {
+      currentFont = fonts[fontIndex].name;
+      regenerateWithSettings();
+      showNotification(`Font changed to ${fonts[fontIndex].name}!`, "success");
+    }
+  }
+  
+  /**
+   * Handle font size change
+   */
+  function handleFontSizeChange() {
+    const sizes = [
+      { size: 20, display: "Small (20px)" },
+      { size: 24, display: "Medium Small (24px)" },
+      { size: 28, display: "Medium (28px) - Default" },
+      { size: 32, display: "Medium Large (32px)" },
+      { size: 36, display: "Large (36px)" },
+      { size: 40, display: "Extra Large (40px)" }
+    ];
+    
+    let sizeList = "Choose font size:\n\n";
+    sizes.forEach((size, index) => {
+      sizeList += `${index + 1}. ${size.display}\n`;
+    });
+    
+    const choice = prompt(sizeList + "\nEnter number (1-6):");
+    const sizeIndex = parseInt(choice) - 1;
+    
+    if (sizeIndex >= 0 && sizeIndex < sizes.length) {
+      currentFontSize = sizes[sizeIndex].size;
+      regenerateWithSettings();
+      showNotification(`Font size changed to ${sizes[sizeIndex].size}px!`, "success");
+    }
+  }
+  
+  /**
+   * Regenerate image with current font and size settings
+   */
+  function regenerateWithSettings() {
     chrome.storage.local.get(["quoteText"], (data) => {
       if (data.quoteText) {
-        // Show a simple prompt to edit the text
-        const newText = prompt("Edit your quote:", data.quoteText);
+        msg.textContent = "Updating with new settings...";
+        disableExportButtons();
         
-        if (newText && newText.trim() !== "" && newText !== data.quoteText) {
-          // Show loading message
-          msg.textContent = "Generating updated quote...";
-          disableExportButtons();
-          
-          // Update the stored text and regenerate
-          chrome.storage.local.set({ quoteText: newText.trim() });
-          
-          // Request regeneration with new text
-          chrome.runtime.sendMessage({
-            action: "regenerateQuote",
-            text: newText.trim(),
-            includeWatermark: !watermarkRemoved
-          }, (response) => {
-            if (response && response.imageData) {
-              currentImageData = response.imageData;
-              img.src = response.imageData;
-              msg.textContent = "Quote updated successfully!";
-              enableExportButtons();
-              
-              showNotification("Quote updated successfully!", "success");
-            } else {
-              msg.textContent = "Failed to update quote";
-              showNotification("Failed to update quote", "error");
-            }
-          });
-        }
-      } else {
-        showNotification("No quote text found", "error");
+        chrome.runtime.sendMessage({
+          action: "regenerateWithSettings",
+          text: data.quoteText,
+          font: currentFont,
+          fontSize: currentFontSize,
+          includeWatermark: !watermarkRemoved
+        }, (response) => {
+          if (response && response.imageData) {
+            currentImageData = response.imageData;
+            img.src = response.imageData;
+            msg.textContent = "Settings updated successfully!";
+            enableExportButtons();
+          } else {
+            msg.textContent = "Failed to update settings";
+            showNotification("Failed to update settings", "error");
+          }
+        });
       }
     });
+  }
+  
+  /**
+   * Handle Done button click - hides edit panel
+   */
+  function handleDone() {
+    if (editMode) {
+      // Exit edit mode with animation
+      editPanel.classList.add("exiting");
+      editPanel.classList.remove("active");
+      
+      setTimeout(() => {
+        editPanel.classList.remove("exiting");
+        editMode = false;
+        quickEditBtn.style.opacity = "1";
+      }, 400);
+    }
   }
    
    // Event listeners for export buttons
@@ -302,6 +381,11 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Event listener for quick edit
   quickEditBtn.addEventListener("click", handleQuickEdit);
+  
+  // Event listeners for edit panel
+  fontBtn.addEventListener("click", handleFontChange);
+  fontSizeBtn.addEventListener("click", handleFontSizeChange);
+  doneBtn.addEventListener("click", handleDone);
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
