@@ -597,6 +597,137 @@
         opacity: 0;
         transition: all 0.2s ease-out;
       }
+      
+      /* Size Container Styling */
+      .size-container {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        padding: 8px;
+        margin: 0;
+        transform: translateX(50px);
+        opacity: 0;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      }
+      
+      .edit-panel.active .size-container {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.2s forwards;
+      }
+      
+      .edit-panel.exiting .size-container {
+        transform: translateX(50px);
+        opacity: 0;
+        transition: all 0.2s ease-out;
+      }
+      
+      /* Size Button Styling */
+      .size-btn {
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        font-weight: bold;
+        font-size: 18px;
+        color: white;
+        background: rgba(255, 255, 255, 0.1);
+        outline: none;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .size-btn::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        border-radius: 8px;
+      }
+      
+      .size-btn:hover::before {
+        opacity: 1;
+      }
+      
+      .size-btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+      
+      .size-btn:active {
+        transform: scale(0.95);
+        transition: transform 0.1s ease;
+      }
+      
+      /* Decrease Button */
+      .decrease-btn:hover {
+        background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+        color: white;
+      }
+      
+      /* Increase Button */
+      .increase-btn:hover {
+        background: linear-gradient(135deg, #51cf66, #40c057);
+        color: white;
+      }
+      
+      /* Size Display */
+      .size-display {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+        padding: 0 12px;
+        min-width: 50px;
+        justify-content: center;
+        position: relative;
+      }
+      
+      .size-value {
+        font-size: 16px;
+        font-weight: bold;
+        color: white;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      
+      .size-unit {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 500;
+      }
+      
+      /* Size value animation */
+      .size-value.updating {
+        transform: scale(1.2);
+        color: #51cf66;
+      }
+      
+      /* Size icon styling */
+      .size-icon {
+        font-size: 16px;
+        line-height: 1;
+        user-select: none;
+      }
+      
+      /* Shake animation for size limits */
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-3px); }
+        75% { transform: translateX(3px); }
+      }
     </style>
   </head>
   <body>
@@ -638,10 +769,18 @@
           <span class="btn-icon">🔤</span>
           <span class="btn-text">Font</span>
         </button>
-        <button id="fontSizeBtn" class="panel-btn">
-          <span class="btn-icon">📏</span>
-          <span class="btn-text">Size</span>
-        </button>
+        <div id="fontSizeContainer" class="size-container">
+          <button id="decreaseSizeBtn" class="size-btn decrease-btn">
+            <span class="size-icon">−</span>
+          </button>
+          <div class="size-display">
+            <span id="currentSize" class="size-value">28</span>
+            <span class="size-unit">px</span>
+          </div>
+          <button id="increaseSizeBtn" class="size-btn increase-btn">
+            <span class="size-icon">+</span>
+          </button>
+        </div>
         <button id="doneBtn" class="panel-btn done-btn">
           <span class="btn-icon">✅</span>
           <span class="btn-text">Done</span>
