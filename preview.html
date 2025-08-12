@@ -487,6 +487,116 @@
       .quick-edit-btn:hover {
         animation: none;
       }
+      
+      /* Edit Panel Styling */
+      .edit-panel {
+        position: fixed;
+        right: -200px; /* Hidden initially */
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(15px);
+        border-radius: 20px 0 0 20px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: -5px 0 25px rgba(0, 0, 0, 0.2);
+        transition: right 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        z-index: 1000;
+        min-width: 120px;
+      }
+      
+      .edit-panel.active {
+        right: 20px; /* Slides in from right */
+      }
+      
+      /* Panel Button Styling */
+      .panel-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        outline: none;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transform: translateX(50px);
+        opacity: 0;
+        min-width: 80px;
+        justify-content: flex-start;
+      }
+      
+      /* Staggered animation for buttons */
+      .edit-panel.active .panel-btn:nth-child(1) {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.1s forwards;
+      }
+      
+      .edit-panel.active .panel-btn:nth-child(2) {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.2s forwards;
+      }
+      
+      .edit-panel.active .panel-btn:nth-child(3) {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.3s forwards;
+      }
+      
+      @keyframes slideInPanel {
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      
+      /* Panel button hover effects */
+      .panel-btn:hover {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
+        transform: translateX(-5px) scale(1.05);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      }
+      
+      .panel-btn:active {
+        transform: translateX(-5px) scale(0.98);
+      }
+      
+      /* Done button special styling */
+      .done-btn {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%) !important;
+        border-color: rgba(67, 233, 123, 0.5);
+      }
+      
+      .done-btn:hover {
+        background: linear-gradient(135deg, #38f9d7 0%, #43e97b 100%) !important;
+        box-shadow: 0 5px 15px rgba(67, 233, 123, 0.4);
+      }
+      
+      /* Button icons */
+      .btn-icon {
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+      }
+      
+      .btn-text {
+        font-weight: 600;
+      }
+      
+      /* Exit animation */
+      .edit-panel.exiting {
+        right: -200px;
+        transition: right 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+      }
+      
+      .edit-panel.exiting .panel-btn {
+        transform: translateX(50px);
+        opacity: 0;
+        transition: all 0.2s ease-out;
+      }
     </style>
   </head>
   <body>
@@ -521,6 +631,22 @@
         <span class="edit-text">Quick Edit</span>
         <div class="edit-glow"></div>
       </button>
+      
+      <!-- Edit Panel - appears on right side -->
+      <div id="editPanel" class="edit-panel">
+        <button id="fontBtn" class="panel-btn">
+          <span class="btn-icon">🔤</span>
+          <span class="btn-text">Font</span>
+        </button>
+        <button id="fontSizeBtn" class="panel-btn">
+          <span class="btn-icon">📏</span>
+          <span class="btn-text">Size</span>
+        </button>
+        <button id="doneBtn" class="panel-btn done-btn">
+          <span class="btn-icon">✅</span>
+          <span class="btn-text">Done</span>
+        </button>
+      </div>
     </div>
     
     <!-- Container for the generated quote image -->

@@ -309,6 +309,73 @@ function addWatermark(ctx, width, height, gradient) {
 
 
 /**
+ * Generate quote image data with custom font and size settings
+ * @param {string} text - The text to display
+ * @param {Array} selectedGradient - The gradient colors to use (null for random)
+ * @param {boolean} includeWatermark - Whether to include watermark
+ * @param {string} font - Font family to use
+ * @param {number} fontSize - Font size to use
+ * @returns {Promise} Promise that resolves with image data
+ */
+function generateQuoteImageDataWithSettings(text, selectedGradient, includeWatermark = true, font = "Arial", fontSize = 28) {
+  return new Promise((resolve) => {
+    // Create offscreen canvas for image generation (800x400 pixels)
+    const canvas = new OffscreenCanvas(800, 400);
+    const ctx = canvas.getContext("2d");
+
+    // Use provided gradient or select random one
+    let gradient, finalGradient;
+    if (selectedGradient) {
+      finalGradient = selectedGradient;
+    } else {
+      // Random gradient backgrounds
+      const gradients = [
+        ["#4facfe", "#00f2fe"], // blue
+        ["#43e97b", "#38f9d7"], // green-teal
+        ["#fa709a", "#fee140"], // pink-yellow
+        ["#30cfd0", "#330867"], // teal-purple
+        ["#ff9a9e", "#fad0c4"], // soft pink
+        ["#a1c4fd", "#c2e9fb"], // sky blue
+        ["#667eea", "#764ba2"], // violet
+        ["#fddb92", "#d1fdff"], // pastel
+      ];
+      finalGradient = gradients[Math.floor(Math.random() * gradients.length)];
+      chrome.storage.local.set({ currentGradient: finalGradient });
+    }
+
+    gradient = ctx.createLinearGradient(0, 0, 800, 400);
+    gradient.addColorStop(0, finalGradient[0]);
+    gradient.addColorStop(1, finalGradient[1]);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 800, 400);
+
+    // Dynamic text color based on background brightness
+    const brightness = getBrightness(finalGradient[0]);
+    ctx.fillStyle = brightness > 200 ? "#000000" : "#ffffff";
+    ctx.font = `bold ${fontSize}px ${font}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const lines = wrapText(ctx, text, 720);
+    const lineHeight = Math.round(fontSize * 1.3); // Dynamic line height based on font size
+    const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+    lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
+
+    // Add watermark if requested
+    if (includeWatermark) {
+      addWatermark(ctx, canvas.width, canvas.height, finalGradient);
+    }
+
+    // Convert canvas to blob and resolve
+    canvas.convertToBlob().then((blob) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+  });
+}
+
+/**
  * Generate quote image data with a specific gradient (maintains color consistency)
  * @param {string} text - The selected text to beautify
  * @param {Array} selectedGradient - The gradient colors to use
@@ -523,6 +590,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } else {
         // Fallback: regenerate with new gradient if currentGradient is missing
         generateQuoteImageData(request.text, request.includeWatermark).then((imageData) => {
+          chrome.storage.local.set({ quoteImage: imageData });
+          sendResponse({ imageData: imageData });
+        });
+      }
+    });
+    return true; // Keep the message channel open for async response
+  }
+  
+  if (request.action === "regenerateWithSettings") {
+    chrome.storage.local.get(["currentGradient"], (data) => {
+      if (data.currentGradient) {
+        generateQuoteImageDataWithSettings(request.text, data.currentGradient, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+          chrome.storage.local.set({ quoteImage: imageData });
+          sendResponse({ imageData: imageData });
+        });
+      } else {
+        // Fallback: regenerate with new gradient if currentGradient is missing
+        generateQuoteImageDataWithSettings(request.text, null, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
         });
