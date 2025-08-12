@@ -347,8 +347,7 @@ function generateQuoteImageDataWithFont(text, selectedGradient, includeWatermark
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 800, 400);
 
-    // Add subtle decorative pattern overlay
-    addSubtlePattern(ctx, 800, 400, finalGradient);
+    
 
     // Dynamic text color based on background brightness
     const brightness = getBrightness(finalGradient[0]);
@@ -396,8 +395,7 @@ function generateQuoteImageDataWithGradient(text, selectedGradient, includeWater
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 800, 400);
 
-    // Add subtle decorative pattern overlay
-    addSubtlePattern(ctx, 800, 400, selectedGradient);
+
 
     // Dynamic text color based on background brightness
     const brightness = getBrightness(selectedGradient[0]);
@@ -460,8 +458,7 @@ function generateQuoteImageData(text, includeWatermark = true) {
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, 800, 400);
 
-      // Add subtle decorative pattern overlay
-      addSubtlePattern(ctx, 800, 400, selected);
+
 
       // Dynamic text color based on background brightness
       const brightness = getBrightness(selected[0]);
@@ -503,14 +500,10 @@ function generateQuoteImageData(text, includeWatermark = true) {
  * @returns {string} SVG data URL
  */
 function generateSVGQuote(text, gradient, includeWatermark = true, font = "Arial") {
-  // Calculate brightness for pattern styling
+  // Calculate brightness for text color
   const startBrightness = getBrightness(gradient[0]);
   const endBrightness = getBrightness(gradient[1]);
   const avgBrightness = (startBrightness + endBrightness) / 2;
-  
-  // More visible opacity based on background brightness
-  const patternOpacity = avgBrightness > 150 ? 0.12 : 0.15;
-  const patternColor = avgBrightness > 150 ? "#000000" : "#ffffff";
 
   // Dynamic text color based on background brightness
   const textColor = avgBrightness > 200 ? "#000000" : "#ffffff";
@@ -524,7 +517,7 @@ function generateSVGQuote(text, gradient, includeWatermark = true, font = "Arial
   const lineHeight = 40;
   const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
 
-  // Create SVG content with gradient background, subtle pattern, and text
+    // Create SVG content with clean gradient background and text
   let svgContent = `
     <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -532,41 +525,14 @@ function generateSVGQuote(text, gradient, includeWatermark = true, font = "Arial
           <stop offset="0%" style="stop-color:${gradient[0]};stop-opacity:1" />
           <stop offset="100%" style="stop-color:${gradient[1]};stop-opacity:1" />
         </linearGradient>
-        <pattern id="subtlePattern" patternUnits="userSpaceOnUse" width="100" height="100">
-          <circle cx="50" cy="50" r="3" fill="${patternColor}" opacity="${patternOpacity}" />
-          <circle cx="75" cy="75" r="1.5" fill="${patternColor}" opacity="${patternOpacity}" />
-        </pattern>
       </defs>
       
       <rect width="800" height="400" fill="url(#bgGradient)" />
-      <rect width="800" height="400" fill="url(#subtlePattern)" />
       
-             <!-- Enhanced diagonal lines -->
-       <g stroke="${patternColor}" stroke-width="1" opacity="${patternOpacity * 0.6}">
-         ${Array.from({length: 8}, (_, i) => {
-           const x = i * 150;
-           return `<line x1="${x}" y1="0" x2="${x - 400}" y2="400" />`;
-         }).join('\n        ')}
-       </g>
-       <g stroke="${patternColor}" stroke-width="1" opacity="${patternOpacity * 0.3}">
-         ${Array.from({length: 8}, (_, i) => {
-           const x = i * 150 + 75;
-           return `<line x1="${x}" y1="0" x2="${x + 400}" y2="400" />`;
-         }).join('\n        ')}
-       </g>
-      
-             <!-- Enhanced corner decorations -->
-       <g stroke="${patternColor}" stroke-width="2" fill="none" opacity="${patternOpacity * 0.8}">
-         <path d="M 0,80 A 80,80 0 0,1 80,0" />
-         <path d="M 0,120 A 120,120 0 0,1 120,0" />
-         <path d="M 720,400 A 80,80 0 0,1 800,320" />
-         <path d="M 680,400 A 120,120 0 0,1 800,280" />
-       </g>
-      
-             ${wrappedLines.map((line, index) => {
-         const y = startY + index * lineHeight;
-         return `<text x="400" y="${y}" text-anchor="middle" font-family="${font}" font-size="32" font-weight="bold" fill="${textColor}">${line}</text>`;
-       }).join('\n      ')}
+      ${wrappedLines.map((line, index) => {
+        const y = startY + index * lineHeight;
+        return `<text x="400" y="${y}" text-anchor="middle" font-family="${font}" font-size="32" font-weight="bold" fill="${textColor}">${line}</text>`;
+      }).join('\n      ')}
     `;
   
   // Add watermark if requested
