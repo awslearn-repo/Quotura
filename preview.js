@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const downloadSvgBtn = document.getElementById("downloadSvgBtn"); // SVG download button
   const copyImageBtn = document.getElementById("copyImageBtn");     // Copy to clipboard button
   const removeWatermarkBtn = document.getElementById("removeWatermarkBtn"); // Remove watermark button
-  const fontSelect = document.getElementById("fontSelect");         // Font selection dropdown
+  const quickEditBtn = document.getElementById("quickEditBtn");             // Quick edit button
   
   // State variables
   let currentImageData = null;
@@ -16,9 +16,6 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Initialize the preview page
   initializePreview();
-  
-  // Load saved font preference
-  loadFontPreference();
   
   /**
    * Initialize the preview page by loading the generated image
@@ -255,54 +252,47 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 3000);
   }
   
-  /**
-   * Handle font change selection
+    /**
+   * Handle Quick Edit button click
    */
-  function handleFontChange() {
-    const selectedFont = fontSelect.value;
-    
-    // Store the selected font preference
-    chrome.storage.local.set({ selectedFont: selectedFont });
-    
-    // Show loading message
-    msg.textContent = "Regenerating with new font...";
-    disableExportButtons();
-    
-    // Request regeneration with new font
+  function handleQuickEdit() {
     chrome.storage.local.get(["quoteText"], (data) => {
       if (data.quoteText) {
-        chrome.runtime.sendMessage({
-          action: "regenerateWithFont",
-          text: data.quoteText,
-          font: selectedFont,
-          includeWatermark: !watermarkRemoved
-        }, (response) => {
-          if (response && response.imageData) {
-            currentImageData = response.imageData;
-            img.src = response.imageData;
-            msg.textContent = "Font updated successfully!";
-            enableExportButtons();
-            
-            showNotification("Font changed successfully!", "success");
-          } else {
-            msg.textContent = "Failed to change font";
-            showNotification("Failed to change font", "error");
-          }
-        });
+        // Show a simple prompt to edit the text
+        const newText = prompt("Edit your quote:", data.quoteText);
+        
+        if (newText && newText.trim() !== "" && newText !== data.quoteText) {
+          // Show loading message
+          msg.textContent = "Generating updated quote...";
+          disableExportButtons();
+          
+          // Update the stored text and regenerate
+          chrome.storage.local.set({ quoteText: newText.trim() });
+          
+          // Request regeneration with new text
+          chrome.runtime.sendMessage({
+            action: "regenerateQuote",
+            text: newText.trim(),
+            includeWatermark: !watermarkRemoved
+          }, (response) => {
+            if (response && response.imageData) {
+              currentImageData = response.imageData;
+              img.src = response.imageData;
+              msg.textContent = "Quote updated successfully!";
+              enableExportButtons();
+              
+              showNotification("Quote updated successfully!", "success");
+            } else {
+              msg.textContent = "Failed to update quote";
+              showNotification("Failed to update quote", "error");
+            }
+          });
+        }
+      } else {
+        showNotification("No quote text found", "error");
       }
-         });
-   }
-   
-   /**
-    * Load saved font preference and update dropdown
-    */
-   function loadFontPreference() {
-     chrome.storage.local.get(["selectedFont"], (data) => {
-       if (data.selectedFont) {
-         fontSelect.value = data.selectedFont;
-       }
-     });
-   }
+    });
+  }
    
    // Event listeners for export buttons
   downloadPngBtn.addEventListener("click", downloadPNG);
@@ -310,8 +300,8 @@ document.addEventListener("DOMContentLoaded", () => {
   copyImageBtn.addEventListener("click", copyToClipboard);
   removeWatermarkBtn.addEventListener("click", removeWatermark);
   
-  // Event listener for font selection
-  fontSelect.addEventListener("change", handleFontChange);
+  // Event listener for quick edit
+  quickEditBtn.addEventListener("click", handleQuickEdit);
   
   // Interactive blob functionality
   initializeInteractiveBlobs();

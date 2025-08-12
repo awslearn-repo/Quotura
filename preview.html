@@ -4,10 +4,7 @@
     <meta charset="UTF-8" />
     <title>Quotura Preview</title>
     
-    <!-- Google Font for Patrick Hand SC -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand+SC&display=swap" rel="stylesheet">
+
 
     <style>
       /* Main layout - vertical flex container with beautiful background */
@@ -399,53 +396,96 @@
         cursor: wait;
       }
       
-      /* Font selector styling */
-      .font-selector {
+      /* Quick Edit Button Styling */
+      .quick-edit-container {
         margin: 20px 0;
         text-align: center;
-        padding: 15px;
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        position: relative;
       }
       
-      .font-selector label {
-        display: block;
-        margin-bottom: 10px;
+      .quick-edit-btn {
+        position: relative;
+        padding: 15px 30px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        border-radius: 50px;
         color: white;
-        font-weight: bold;
         font-size: 16px;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-      }
-      
-      .font-selector select {
-        padding: 12px 20px;
-        border-radius: 25px;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        background: rgba(255, 255, 255, 0.9);
-        color: #333;
-        font-size: 14px;
-        font-weight: 500;
+        font-weight: 600;
         cursor: pointer;
         outline: none;
+        overflow: hidden;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 160px;
+        justify-content: center;
+      }
+      
+      .edit-icon {
+        font-size: 18px;
+        transition: transform 0.3s ease;
+      }
+      
+      .edit-text {
         transition: all 0.3s ease;
-        min-width: 280px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        position: relative;
+        z-index: 2;
       }
       
-      .font-selector select:hover {
-        border-color: rgba(255, 255, 255, 0.5);
-        background: rgba(255, 255, 255, 1);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+      .edit-glow {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        border-radius: 50px;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        z-index: 1;
       }
       
-      .font-selector select:focus {
-        border-color: #667eea;
-        background: rgba(255, 255, 255, 1);
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+      .quick-edit-btn:hover {
+        transform: translateY(-3px) scale(1.05);
+        box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+      }
+      
+      .quick-edit-btn:hover .edit-glow {
+        opacity: 1;
+      }
+      
+      .quick-edit-btn:hover .edit-icon {
+        transform: rotate(15deg) scale(1.1);
+      }
+      
+      .quick-edit-btn:hover .edit-text {
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      
+      .quick-edit-btn:active {
+        transform: translateY(-1px) scale(1.02);
+        transition: all 0.1s ease;
+      }
+      
+      /* Pulse animation for attention */
+      @keyframes editPulse {
+        0%, 100% {
+          box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        50% {
+          box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+      }
+      
+      .quick-edit-btn {
+        animation: editPulse 3s ease-in-out infinite;
+      }
+      
+      .quick-edit-btn:hover {
+        animation: none;
       }
     </style>
   </head>
@@ -474,16 +514,13 @@
       Your beautified quote is ready!
     </div>
     
-    <!-- Font Selection Dropdown -->
-    <div class="font-selector">
-      <label for="fontSelect">Choose Font:</label>
-      <select id="fontSelect">
-        <option value="Arial" selected>Arial - Clean & Professional</option>
-        <option value="Impact">Impact - Bold & Strong</option>
-                  <option value="Patrick Hand SC">Patrick Hand SC - Handwritten Style</option>
-        <option value="Georgia">Georgia - Elegant Serif</option>
-        <option value="Trebuchet MS">Trebuchet MS - Modern Sans-Serif</option>
-      </select>
+        <!-- Quick Edit Button -->
+    <div class="quick-edit-container">
+      <button id="quickEditBtn" class="quick-edit-btn">
+        <span class="edit-icon">✏️</span>
+        <span class="edit-text">Quick Edit</span>
+        <div class="edit-glow"></div>
+      </button>
     </div>
     
     <!-- Container for the generated quote image -->
