@@ -202,32 +202,37 @@ document.addEventListener("DOMContentLoaded", () => {
     
     setButtonLoading(removeWatermarkBtn, true);
     
-    // Small delay to ensure gradient is properly stored
-    setTimeout(() => {
-      // Request image generation without watermark from background script
-      chrome.runtime.sendMessage({
-        action: "generateWithoutWatermark"
-      }, (response) => {
-      setButtonLoading(removeWatermarkBtn, false);
-      
-      if (response && response.imageData) {
-        // Update current image with watermark-free version
-        currentImageData = response.imageData;
-        img.src = response.imageData;
-        watermarkRemoved = true;
-        
-        // Update UI to reflect watermark removal
-        removeWatermarkBtn.textContent = "✅ Watermark Removed";
-        removeWatermarkBtn.disabled = true;
-        removeWatermarkBtn.classList.remove("btn-warning");
-        removeWatermarkBtn.classList.add("btn-success");
-        
-        showNotification("Watermark removed successfully!", "success");
-      } else {
-        showNotification("Failed to remove watermark", "error");
+    // Use current font and size settings when removing watermark
+    chrome.storage.local.get(["quoteText"], (data) => {
+      if (data.quoteText) {
+        chrome.runtime.sendMessage({
+          action: "regenerateWithSettings",
+          text: data.quoteText,
+          font: currentFont,
+          fontSize: currentFontSize,
+          includeWatermark: false
+        }, (response) => {
+          setButtonLoading(removeWatermarkBtn, false);
+          
+          if (response && response.imageData) {
+            // Update current image with watermark-free version
+            currentImageData = response.imageData;
+            img.src = response.imageData;
+            watermarkRemoved = true;
+            
+            // Update UI to reflect watermark removal
+            removeWatermarkBtn.textContent = "✅ Watermark Removed";
+            removeWatermarkBtn.disabled = true;
+            removeWatermarkBtn.classList.remove("btn-warning");
+            removeWatermarkBtn.classList.add("btn-success");
+            
+            showNotification("Watermark removed successfully!", "success");
+          } else {
+            showNotification("Failed to remove watermark", "error");
+          }
+        });
       }
     });
-    }, 200); // 200ms delay to ensure storage is complete
   }
   
   /**
@@ -274,30 +279,93 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   
   /**
-   * Handle font selection
+   * Handle font selection - creates beautiful font picker modal
    */
   function handleFontChange() {
+    // Create font picker modal
+    const modal = createFontPickerModal();
+    document.body.appendChild(modal);
+    
+    // Animate in
+    setTimeout(() => {
+      modal.classList.add('active');
+    }, 10);
+  }
+  
+  /**
+   * Create beautiful font picker modal
+   */
+  function createFontPickerModal() {
     const fonts = [
-      { name: "Arial", display: "Arial - Clean & Professional" },
-      { name: "Impact", display: "Impact - Bold & Strong" },
-      { name: "Georgia", display: "Georgia - Elegant Serif" },
-      { name: "Trebuchet MS", display: "Trebuchet MS - Modern Sans" },
-      { name: "Courier New", display: "Courier New - Monospace" }
+      { name: "Arial", display: "Arial", description: "Clean & Professional", sample: "The quick brown fox jumps" },
+      { name: "Georgia", display: "Georgia", description: "Elegant Serif", sample: "The quick brown fox jumps" },
+      { name: "Helvetica", display: "Helvetica", description: "Modern Classic", sample: "The quick brown fox jumps" },
+      { name: "Times New Roman", display: "Times", description: "Traditional Serif", sample: "The quick brown fox jumps" },
+      { name: "Verdana", display: "Verdana", description: "Clear & Readable", sample: "The quick brown fox jumps" }
     ];
     
-    let fontList = "Choose a font:\n\n";
-    fonts.forEach((font, index) => {
-      fontList += `${index + 1}. ${font.display}\n`;
+    const modal = document.createElement('div');
+    modal.className = 'font-picker-modal';
+    modal.innerHTML = `
+      <div class="font-picker-backdrop"></div>
+      <div class="font-picker-container">
+        <div class="font-picker-header">
+          <h3>Choose Font Style</h3>
+          <button class="close-btn">✕</button>
+        </div>
+        <div class="font-options">
+          ${fonts.map((font, index) => `
+            <div class="font-option ${font.name === currentFont ? 'selected' : ''}" data-font="${font.name}">
+              <div class="font-info">
+                <div class="font-name" style="font-family: ${font.name}">${font.display}</div>
+                <div class="font-desc">${font.description}</div>
+              </div>
+              <div class="font-sample" style="font-family: ${font.name}">${font.sample}</div>
+              <div class="select-indicator">✓</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    
+    // Add event listeners
+    const closeBtn = modal.querySelector('.close-btn');
+    const backdrop = modal.querySelector('.font-picker-backdrop');
+    const options = modal.querySelectorAll('.font-option');
+    
+    closeBtn.addEventListener('click', () => closeFontPicker(modal));
+    backdrop.addEventListener('click', () => closeFontPicker(modal));
+    
+    options.forEach(option => {
+      option.addEventListener('click', () => {
+        const fontName = option.dataset.font;
+        selectFont(fontName, modal);
+      });
     });
     
-    const choice = prompt(fontList + "\nEnter number (1-5):");
-    const fontIndex = parseInt(choice) - 1;
-    
-    if (fontIndex >= 0 && fontIndex < fonts.length) {
-      currentFont = fonts[fontIndex].name;
+    return modal;
+  }
+  
+  /**
+   * Select font and update image
+   */
+  function selectFont(fontName, modal) {
+    if (fontName !== currentFont) {
+      currentFont = fontName;
       regenerateWithSettings();
-      showNotification(`Font changed to ${fonts[fontIndex].name}!`, "success");
+      showNotification(`Font changed to ${fontName}!`, "success");
     }
+    closeFontPicker(modal);
+  }
+  
+  /**
+   * Close font picker with animation
+   */
+  function closeFontPicker(modal) {
+    modal.classList.add('closing');
+    setTimeout(() => {
+      document.body.removeChild(modal);
+    }, 300);
   }
   
   /**
