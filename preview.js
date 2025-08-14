@@ -266,7 +266,68 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 3000);
   }
   
-    /**
+  /**
+   * Show support modal and proceed with watermark removal
+   */
+  function handleRemoveWatermarkClick() {
+    if (!watermarkRemoved) {
+      const modal = createSupportModal();
+      document.body.appendChild(modal);
+      setTimeout(() => {
+        modal.classList.add('active');
+      }, 10);
+    }
+    removeWatermark();
+  }
+  
+  /**
+   * Create support modal asking for voluntary contribution
+   */
+  function createSupportModal() {
+    const modal = document.createElement('div');
+    modal.className = 'support-modal';
+    modal.innerHTML = `
+      <div class="support-backdrop"></div>
+      <div class="support-container">
+        <div class="support-header">
+          <h3>💛 Support Quotura</h3>
+          <button class="close-btn">✕</button>
+        </div>
+        <div class="support-content">
+          <p class="support-message">“Enjoying Quotura? Your support helps keep it fast, simple, and free! If you’d like, you can make a voluntary contribution. Every little bit helps!”</p>
+          <a href="https://ko-fi.com/W7W61JP2OR" target="_blank" rel="noopener" class="support-cta-btn">You're Awesome</a>
+          <div class="support-note">No pressure — you can still remove the watermark even if you don’t pay.</div>
+        </div>
+      </div>
+    `;
+
+    const closeBtn = modal.querySelector('.close-btn');
+    const backdrop = modal.querySelector('.support-backdrop');
+    const ctaBtn = modal.querySelector('.support-cta-btn');
+
+    const close = () => closeSupportModal(modal);
+    closeBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', close);
+    ctaBtn.addEventListener('click', () => {
+      setTimeout(() => closeSupportModal(modal), 100);
+    });
+
+    return modal;
+  }
+  
+  /**
+   * Close support modal with animation
+   */
+  function closeSupportModal(modal) {
+    modal.classList.add('closing');
+    setTimeout(() => {
+      if (modal && modal.parentNode) {
+        document.body.removeChild(modal);
+      }
+    }, 300);
+  }
+  
+  /**
    * Handle Quick Edit button click - shows edit panel
    */
   function handleQuickEdit() {
@@ -457,7 +518,7 @@ document.addEventListener("DOMContentLoaded", () => {
   downloadPngBtn.addEventListener("click", downloadPNG);
   downloadSvgBtn.addEventListener("click", downloadSVG);
   copyImageBtn.addEventListener("click", copyToClipboard);
-  removeWatermarkBtn.addEventListener("click", removeWatermark);
+  removeWatermarkBtn.addEventListener("click", handleRemoveWatermarkClick);
   
   // Event listener for quick edit
   quickEditBtn.addEventListener("click", handleQuickEdit);
