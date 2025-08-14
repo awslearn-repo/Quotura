@@ -294,7 +294,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <button class="close-btn">✕</button>
         </div>
         <div class="support-content">
-          <p class="support-message">“Enjoying Quotura? Your support helps keep it fast, simple, and free! If you’d like, you can make a voluntary contribution. Every little bit helps!”</p>
+          <p class="support-message"><strong>Quotura</strong> is a fast, no-frills text-to-quote tool that saves time creating and sharing beautiful quotes. It’s free to use, and your support helps keep it running and improving ☕💛.</p>
           <a href="https://ko-fi.com/W7W61JP2OR" target="_blank" rel="noopener" class="support-cta-btn">You're Awesome</a>
           <div class="support-note">No pressure — you can still remove the watermark even if you don’t pay.</div>
         </div>
