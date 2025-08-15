@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const increaseSizeBtn = document.getElementById("increaseSizeBtn");       // Increase size button
   const currentSizeDisplay = document.getElementById("currentSize");        // Current size display
   const doneBtn = document.getElementById("doneBtn");                       // Done button
+  const backgroundBtn = document.getElementById("backgroundBtn");           // Background selection button
   
   // State variables
   let currentImageData = null;
@@ -22,6 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let editMode = false;
   let currentFont = "Arial";
   let currentFontSize = 28;
+  let currentGradientChoice = null; // null means random
   
   // Initialize the preview page
   initializePreview();
@@ -430,6 +432,106 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   
   /**
+   * Handle background selection - opens gradient picker modal
+   */
+  function handleBackgroundChange() {
+    const modal = createGradientPickerModal();
+    document.body.appendChild(modal);
+    setTimeout(() => {
+      modal.classList.add('active');
+    }, 10);
+  }
+  
+  /**
+   * Create gradient picker modal from predefined gradients in background.js
+   */
+  function createGradientPickerModal() {
+    const gradients = [
+      { name: "Blue", colors: ["#4facfe", "#00f2fe"] },
+      { name: "Green Teal", colors: ["#43e97b", "#38f9d7"] },
+      { name: "Pink Yellow", colors: ["#fa709a", "#fee140"] },
+      { name: "Teal Purple", colors: ["#30cfd0", "#330867"] },
+      { name: "Soft Pink", colors: ["#ff9a9e", "#fad0c4"] },
+      { name: "Sky Blue", colors: ["#a1c4fd", "#c2e9fb"] },
+      { name: "Violet", colors: ["#667eea", "#764ba2"] },
+      { name: "Pastel", colors: ["#fddb92", "#d1fdff"] },
+    ];
+    
+    const modal = document.createElement('div');
+    modal.className = 'gradient-picker-modal';
+    
+    const optionsHTML = [
+      `<div class="gradient-option random-option" data-colors="random">
+        <div class="gradient-swatch" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)">RANDOM</div>
+        <div class="gradient-name">Random</div>
+      </div>`,
+      ...gradients.map(g => `
+        <div class="gradient-option" data-colors='${JSON.stringify(g.colors)}'>
+          <div class="gradient-swatch" style="background: linear-gradient(135deg, ${g.colors[0]} 0%, ${g.colors[1]} 100%)"></div>
+          <div class="gradient-name">${g.name}</div>
+        </div>
+      `)
+    ].join('');
+    
+    modal.innerHTML = `
+      <div class="gradient-picker-backdrop"></div>
+      <div class="gradient-picker-container">
+        <div class="gradient-picker-header">
+          <h3>Choose Background</h3>
+          <button class="close-btn">✕</button>
+        </div>
+        <div class="gradient-grid">
+          ${optionsHTML}
+        </div>
+      </div>
+    `;
+    
+    const closeBtn = modal.querySelector('.close-btn');
+    const backdrop = modal.querySelector('.gradient-picker-backdrop');
+    const options = modal.querySelectorAll('.gradient-option');
+    
+    const close = () => closeGradientPicker(modal);
+    closeBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', close);
+    
+    options.forEach(option => {
+      option.addEventListener('click', () => {
+        const data = option.getAttribute('data-colors');
+        if (data === 'random') {
+          // Clear stored gradient to enable random generation
+          currentGradientChoice = null;
+          chrome.storage.local.remove('currentGradient', () => {
+            regenerateWithSettings();
+            showNotification('Background set to random', 'success');
+          });
+        } else {
+          try {
+            const colors = JSON.parse(data);
+            currentGradientChoice = colors;
+            // Persist chosen gradient so background.js uses it
+            chrome.storage.local.set({ currentGradient: colors }, () => {
+              regenerateWithSettings();
+              showNotification('Background updated!', 'success');
+            });
+          } catch (e) {}
+        }
+        close();
+      });
+    });
+    
+    return modal;
+  }
+  
+  function closeGradientPicker(modal) {
+    modal.classList.add('closing');
+    setTimeout(() => {
+      if (modal && modal.parentNode) {
+        document.body.removeChild(modal);
+      }
+    }, 300);
+  }
+  
+  /**
    * Handle font size increase/decrease
    */
   function handleSizeChange(delta) {
@@ -481,7 +583,8 @@ document.addEventListener("DOMContentLoaded", () => {
           text: data.quoteText,
           font: currentFont,
           fontSize: currentFontSize,
-          includeWatermark: !watermarkRemoved
+          includeWatermark: !watermarkRemoved,
+          gradient: currentGradientChoice // Pass the current gradient choice
         }, (response) => {
           if (response && response.imageData) {
             currentImageData = response.imageData;
@@ -525,6 +628,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Event listeners for edit panel
   fontBtn.addEventListener("click", handleFontChange);
+  backgroundBtn.addEventListener("click", handleBackgroundChange);
   decreaseSizeBtn.addEventListener("click", () => handleSizeChange(-2));
   increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
   doneBtn.addEventListener("click", handleDone);
