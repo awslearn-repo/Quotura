@@ -80,7 +80,12 @@ document.addEventListener("DOMContentLoaded", () => {
     downloadPngBtn.disabled = false;
     downloadSvgBtn.disabled = false;
     copyImageBtn.disabled = false;
-    removeWatermarkBtn.disabled = false;
+    removeWatermarkBtn.disabled = watermarkRemoved;
+    if (watermarkRemoved) {
+      removeWatermarkBtn.textContent = "✅ Watermark Removed";
+      removeWatermarkBtn.classList.remove("btn-warning");
+      removeWatermarkBtn.classList.add("btn-success");
+    }
   }
   
   /**
