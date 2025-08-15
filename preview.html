@@ -892,13 +892,121 @@
         transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
       }
       
-      .font-option.selected .select-indicator {
+            .font-option.selected .select-indicator {
         opacity: 1;
         transform: scale(1);
       }
-
-      /* Support Modal Styling */
-      .support-modal {
+      
+      /* Gradient Picker Modal Styling */
+      .gradient-picker-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10000;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .gradient-picker-modal.active {
+        opacity: 1;
+        visibility: visible;
+      }
+      .gradient-picker-modal.closing {
+        opacity: 0;
+        visibility: hidden;
+      }
+      .gradient-picker-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(10px);
+      }
+      .gradient-picker-container {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.9);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        width: 90%;
+        max-width: 520px;
+        max-height: 80vh;
+        overflow: hidden;
+        transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      }
+      .gradient-picker-modal.active .gradient-picker-container {
+        transform: translate(-50%, -50%) scale(1);
+      }
+      .gradient-picker-modal.closing .gradient-picker-container {
+        transform: translate(-50%, -50%) scale(0.9);
+      }
+      .gradient-picker-header {
+        padding: 20px 25px 15px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+      .gradient-picker-header h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .gradient-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        padding: 16px;
+        max-height: 420px;
+        overflow-y: auto;
+      }
+      .gradient-option {
+        background: rgba(255, 255, 255, 0.8);
+        border: 2px solid transparent;
+        border-radius: 12px;
+        padding: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .gradient-option:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        border-color: rgba(102, 126, 234, 0.3);
+      }
+      .gradient-swatch {
+        width: 100%;
+        height: 56px;
+        border-radius: 8px;
+        box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
+      }
+      .gradient-name {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #444;
+        text-align: center;
+        font-weight: 600;
+      }
+      .random-option .gradient-swatch {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+      }
+ 
+       /* Support Modal Styling */
+       .support-modal {
         position: fixed;
         top: 0;
         left: 0;
@@ -1031,6 +1139,10 @@
         <button id="fontBtn" class="panel-btn">
           <span class="btn-icon">🔤</span>
           <span class="btn-text">Font</span>
+        </button>
+        <button id="backgroundBtn" class="panel-btn">
+          <span class="btn-icon">🎨</span>
+          <span class="btn-text">Background</span>
         </button>
         <div id="fontSizeContainer" class="size-container">
           <button id="decreaseSizeBtn" class="size-btn decrease-btn">
