@@ -15,7 +15,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const increaseSizeBtn = document.getElementById("increaseSizeBtn");       // Increase size button
   const currentSizeDisplay = document.getElementById("currentSize");        // Current size display
   const doneBtn = document.getElementById("doneBtn");                       // Done button
-  const doneBtnEnd = document.getElementById("doneBtnEnd");                 // Secondary Done button at end
   const backgroundBtn = document.getElementById("backgroundBtn");           // Background selection button
   
   // State variables
@@ -638,7 +637,6 @@ document.addEventListener("DOMContentLoaded", () => {
   decreaseSizeBtn.addEventListener("click", () => handleSizeChange(-2));
   increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
   doneBtn.addEventListener("click", handleDone);
-  doneBtnEnd.addEventListener("click", handleDone);
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
