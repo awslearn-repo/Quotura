@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const doneBtn = document.getElementById("doneBtn");                       // Done button
   const backgroundBtn = document.getElementById("backgroundBtn");           // Background selection button
   const editTextBtn = document.getElementById("editTextBtn");               // Edit text button
+  const inlineEditor = document.getElementById("inlineEditor");             // Inline editor overlay
   
   // State variables
   let currentImageData = null;
@@ -27,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentGradientChoice = null; // null means random
   let currentText = null;           // Current editable text content
   let regenerateDebounceId = null;  // Debounce timer id for live updates
+  let inlineEditing = false;        // Whether inline editor is visible
   
   // Initialize the preview page
   initializePreview();
@@ -354,72 +356,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /**
-   * Open Edit Text modal for editing quote content with live preview
+   * Open inline editor overlay for editing quote content with live preview
    */
   function handleEditText() {
-    // Ensure we have the latest stored text
-    chrome.storage.local.get(["quoteText"], (data) => {
-      if (data && data.quoteText) {
-        currentText = data.quoteText;
-      }
-      const modal = createEditTextModal(currentText || "");
-      document.body.appendChild(modal);
-      setTimeout(() => modal.classList.add('active'), 10);
-    });
-  }
-
-  /**
-   * Create Edit Text modal with textarea and live update
-   */
-  function createEditTextModal(initialText) {
-    const modal = document.createElement('div');
-    modal.className = 'text-edit-modal';
-    modal.innerHTML = `
-      <div class="text-edit-backdrop"></div>
-      <div class="text-edit-container">
-        <div class="text-edit-header">
-          <h3>Edit Text</h3>
-          <button class="close-btn">✕</button>
-        </div>
-        <div class="text-edit-content">
-          <textarea class="text-edit-textarea" rows="6" placeholder="Type your quote here...">${escapeHtml(initialText)}</textarea>
-        </div>
-        <div class="text-edit-footer">
-          <button class="text-edit-save btn-primary">Save</button>
-        </div>
-      </div>`;
-
-    const closeBtn = modal.querySelector('.close-btn');
-    const backdrop = modal.querySelector('.text-edit-backdrop');
-    const textarea = modal.querySelector('.text-edit-textarea');
-    const saveBtn = modal.querySelector('.text-edit-save');
-
-    const close = () => closeTextEditModal(modal);
-    closeBtn.addEventListener('click', close);
-    backdrop.addEventListener('click', close);
-
-    // Live update on input with debounce
-    textarea.addEventListener('input', () => {
-      const newText = textarea.value;
-      currentText = newText;
-      // Persist immediately so other parts use latest text
-      chrome.storage.local.set({ quoteText: newText });
-      debounceRegenerateWithNewText();
-    });
-
-    // Save button just closes; content already persisted and preview updated
-    saveBtn.addEventListener('click', close);
-
-    return modal;
-  }
-
-  function closeTextEditModal(modal) {
-    modal.classList.add('closing');
-    setTimeout(() => {
-      if (modal && modal.parentNode) {
-        document.body.removeChild(modal);
-      }
-    }, 300);
+    openInlineEditor();
   }
 
   // Simple HTML escape for initial textarea content
@@ -461,6 +401,62 @@ document.addEventListener("DOMContentLoaded", () => {
         showNotification("Failed to update settings", "error");
       }
     });
+  }
+  
+  /**
+   * Inline editor helpers
+   */
+  function getBrightness(hex) {
+    const rgb = parseInt(hex.slice(1), 16);
+    const r = (rgb >> 16) & 0xff;
+    const g = (rgb >> 8) & 0xff;
+    const b = rgb & 0xff;
+    return (r * 299 + g * 587 + b * 114) / 1000;
+  }
+
+  function syncInlineEditorStyles() {
+    inlineEditor.style.fontFamily = currentFont;
+    inlineEditor.style.fontSize = `${currentFontSize}px`;
+    // Default to white; adjust based on stored gradient for parity with canvas
+    inlineEditor.style.color = '#ffffff';
+    chrome.storage.local.get(["currentGradient"], (data) => {
+      try {
+        const grad = data && data.currentGradient;
+        if (grad && grad[0]) {
+          const brightness = getBrightness(grad[0]);
+          inlineEditor.style.color = brightness > 200 ? '#000000' : '#ffffff';
+        }
+      } catch (_) {}
+    });
+  }
+
+  function placeCaretAtEnd(el) {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function openInlineEditor() {
+    chrome.storage.local.get(["quoteText"], (data) => {
+      currentText = (data && data.quoteText) || currentText || "";
+      inlineEditor.textContent = currentText;
+      syncInlineEditorStyles();
+      inlineEditing = true;
+      inlineEditor.classList.add('active');
+      setTimeout(() => {
+        inlineEditor.focus();
+        placeCaretAtEnd(inlineEditor);
+      }, 0);
+    });
+  }
+
+  function closeInlineEditor() {
+    inlineEditing = false;
+    inlineEditor.classList.remove('active');
+    inlineEditor.blur();
   }
   
   /**
@@ -539,6 +535,7 @@ document.addEventListener("DOMContentLoaded", () => {
       currentFont = fontName;
       regenerateWithSettings();
       showNotification(`Font changed to ${fontName}!`, "success");
+      if (inlineEditing) syncInlineEditorStyles();
     }
     closeFontPicker(modal);
   }
@@ -625,6 +622,7 @@ document.addEventListener("DOMContentLoaded", () => {
           chrome.storage.local.remove('currentGradient', () => {
             regenerateWithSettings();
             showNotification('Background set to random', 'success');
+            if (inlineEditing) setTimeout(() => syncInlineEditorStyles(), 0);
           });
         } else {
           try {
@@ -634,6 +632,7 @@ document.addEventListener("DOMContentLoaded", () => {
             chrome.storage.local.set({ currentGradient: colors }, () => {
               regenerateWithSettings();
               showNotification('Background updated!', 'success');
+              if (inlineEditing) setTimeout(() => syncInlineEditorStyles(), 0);
             });
           } catch (e) {}
         }
@@ -670,6 +669,9 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         currentSizeDisplay.classList.remove("updating");
       }, 300);
+      
+      // Update inline editor style if open
+      if (inlineEditing) syncInlineEditorStyles();
       
       // Regenerate image with new size
       regenerateWithSettings();
@@ -737,6 +739,10 @@ document.addEventListener("DOMContentLoaded", () => {
         quickEditBtn.style.opacity = "1";
       }, 400);
     }
+    // Also close inline editor if open
+    if (inlineEditing) {
+      closeInlineEditor();
+    }
   }
    
    // Event listeners for export buttons
@@ -755,6 +761,25 @@ document.addEventListener("DOMContentLoaded", () => {
   increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
   doneBtn.addEventListener("click", handleDone);
   editTextBtn.addEventListener("click", handleEditText);
+  
+  // Open inline editor when image is clicked
+  img.addEventListener("click", openInlineEditor);
+  
+  // Inline editor live update
+  inlineEditor.addEventListener('input', () => {
+    const newText = inlineEditor.textContent || '';
+    currentText = newText;
+    chrome.storage.local.set({ quoteText: newText });
+    debounceRegenerateWithNewText();
+  });
+
+  // Close inline editor with Escape
+  document.addEventListener('keydown', (e) => {
+    if (inlineEditing && e.key === 'Escape') {
+      e.preventDefault();
+      closeInlineEditor();
+    }
+  });
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
