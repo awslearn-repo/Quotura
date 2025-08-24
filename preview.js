@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const currentSizeDisplay = document.getElementById("currentSize");        // Current size display
   const doneBtn = document.getElementById("doneBtn");                       // Done button
   const backgroundBtn = document.getElementById("backgroundBtn");           // Background selection button
+  const editTextBtn = document.getElementById("editTextBtn");               // Edit text button
   
   // State variables
   let currentImageData = null;
@@ -24,6 +25,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentFont = "Arial";
   let currentFontSize = 28;
   let currentGradientChoice = null; // null means random
+  let currentText = null;           // Current editable text content
+  let regenerateDebounceId = null;  // Debounce timer id for live updates
   
   // Initialize the preview page
   initializePreview();
@@ -52,6 +55,10 @@ document.addEventListener("DOMContentLoaded", () => {
           currentImageData = data.quoteImage;
           img.src = data.quoteImage;                    // Set image source to data URL
           msg.textContent = "Your beautified quote is ready!";
+          // Prime current text for editing
+          chrome.storage.local.get(["quoteText"], (t) => {
+            if (t && t.quoteText) currentText = t.quoteText;
+          });
           
           // Enable export buttons
           enableExportButtons();
@@ -345,6 +352,116 @@ document.addEventListener("DOMContentLoaded", () => {
       quickEditBtn.style.opacity = "0.7";
     }
   }
+
+  /**
+   * Open Edit Text modal for editing quote content with live preview
+   */
+  function handleEditText() {
+    // Ensure we have the latest stored text
+    chrome.storage.local.get(["quoteText"], (data) => {
+      if (data && data.quoteText) {
+        currentText = data.quoteText;
+      }
+      const modal = createEditTextModal(currentText || "");
+      document.body.appendChild(modal);
+      setTimeout(() => modal.classList.add('active'), 10);
+    });
+  }
+
+  /**
+   * Create Edit Text modal with textarea and live update
+   */
+  function createEditTextModal(initialText) {
+    const modal = document.createElement('div');
+    modal.className = 'text-edit-modal';
+    modal.innerHTML = `
+      <div class="text-edit-backdrop"></div>
+      <div class="text-edit-container">
+        <div class="text-edit-header">
+          <h3>Edit Text</h3>
+          <button class="close-btn">✕</button>
+        </div>
+        <div class="text-edit-content">
+          <textarea class="text-edit-textarea" rows="6" placeholder="Type your quote here...">${escapeHtml(initialText)}</textarea>
+        </div>
+        <div class="text-edit-footer">
+          <button class="text-edit-save btn-primary">Save</button>
+        </div>
+      </div>`;
+
+    const closeBtn = modal.querySelector('.close-btn');
+    const backdrop = modal.querySelector('.text-edit-backdrop');
+    const textarea = modal.querySelector('.text-edit-textarea');
+    const saveBtn = modal.querySelector('.text-edit-save');
+
+    const close = () => closeTextEditModal(modal);
+    closeBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', close);
+
+    // Live update on input with debounce
+    textarea.addEventListener('input', () => {
+      const newText = textarea.value;
+      currentText = newText;
+      // Persist immediately so other parts use latest text
+      chrome.storage.local.set({ quoteText: newText });
+      debounceRegenerateWithNewText();
+    });
+
+    // Save button just closes; content already persisted and preview updated
+    saveBtn.addEventListener('click', close);
+
+    return modal;
+  }
+
+  function closeTextEditModal(modal) {
+    modal.classList.add('closing');
+    setTimeout(() => {
+      if (modal && modal.parentNode) {
+        document.body.removeChild(modal);
+      }
+    }, 300);
+  }
+
+  // Simple HTML escape for initial textarea content
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Debounced regenerate to keep typing responsive
+  function debounceRegenerateWithNewText() {
+    if (regenerateDebounceId) clearTimeout(regenerateDebounceId);
+    regenerateDebounceId = setTimeout(() => {
+      regenerateWithSettingsUsingText(currentText || "");
+    }, 250);
+  }
+
+  // Regenerate using explicit text value instead of fetching from storage
+  function regenerateWithSettingsUsingText(textValue) {
+    msg.textContent = "Updating with new settings...";
+    disableExportButtons();
+    chrome.runtime.sendMessage({
+      action: "regenerateWithSettings",
+      text: textValue,
+      font: currentFont,
+      fontSize: currentFontSize,
+      includeWatermark: !watermarkRemoved,
+      gradient: currentGradientChoice
+    }, (response) => {
+      if (response && response.imageData) {
+        currentImageData = response.imageData;
+        img.src = response.imageData;
+        msg.textContent = "Settings updated successfully!";
+        enableExportButtons();
+      } else {
+        msg.textContent = "Failed to update settings";
+        showNotification("Failed to update settings", "error");
+      }
+    });
+  }
   
   /**
    * Handle font selection - creates beautiful font picker modal
@@ -637,6 +754,7 @@ document.addEventListener("DOMContentLoaded", () => {
   decreaseSizeBtn.addEventListener("click", () => handleSizeChange(-2));
   increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
   doneBtn.addEventListener("click", handleDone);
+  editTextBtn.addEventListener("click", handleEditText);
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
