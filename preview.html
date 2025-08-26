@@ -295,12 +295,12 @@
       /* Image container for inline editor overlay */
       #imageContainer {
         position: relative;
-        display: block;
-        width: fit-content;
-        margin-left: auto;
-        margin-right: auto;
+        display: flex;
+        width: 100%;
+        justify-content: center;
+        align-items: center;
       }
-
+      
       /* Inline text editor positioned over the image */
       #inlineEditor {
         position: absolute;
@@ -323,7 +323,7 @@
         z-index: 5;
         cursor: text;
       }
-
+      
       #inlineEditor.active {
         display: block;
       }
