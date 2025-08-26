@@ -1,6 +1,10 @@
 // Wait for DOM to fully load before executing script
 // This ensures all HTML elements are available for manipulation
-document.addEventListener("DOMContentLoaded", () => {
+(function initPreviewScript() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPreviewScript, { once: true });
+    return;
+  }
   // Get references to key DOM elements
   const img = document.getElementById("image");                    // Image container for generated quote
   const msg = document.getElementById("message");                  // Status message element
@@ -31,14 +35,38 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentText = null;           // Current editable text content
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
+
+  function isChromeAvailable() {
+    try {
+      return !!(window.chrome && chrome.runtime && chrome.storage && chrome.storage.local);
+    } catch (e) {
+      return false;
+    }
+  }
   
   // Initialize the preview page
-  initializePreview();
+  try {
+    initializePreview();
+  } catch (e) {
+    console.warn('initializePreview failed', e);
+    msg.textContent = "Open via the extension to generate the image.";
+    // Keep UI responsive
+    // Enable buttons that don't require Chrome APIs
+    downloadPngBtn.disabled = true;
+    downloadSvgBtn.disabled = true;
+    copyImageBtn.disabled = true;
+    removeWatermarkBtn.disabled = true;
+  }
   
   /**
    * Initialize the preview page by loading the generated image
    */
   function initializePreview() {
+    if (!isChromeAvailable()) {
+      msg.textContent = "Open via the extension to generate the image.";
+      // Keep rest of UI interactive
+      return;
+    }
     // Reset state variables
     currentImageData = null;
     watermarkRemoved = false;
@@ -133,7 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Download PNG image
    */
   function downloadPNG() {
-    if (!currentImageData) return;
+    if (!currentImageData || !isChromeAvailable()) return;
     
     setButtonLoading(downloadPngBtn, true);
     
@@ -151,6 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Download SVG image
    */
   function downloadSVG() {
+    if (!isChromeAvailable()) return;
     setButtonLoading(downloadSvgBtn, true);
     
     // Request SVG generation from background script
@@ -216,7 +245,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Remove watermark from image
    */
   function removeWatermark() {
-    if (watermarkRemoved) return;
+    if (watermarkRemoved || !isChromeAvailable()) return;
     
     setButtonLoading(removeWatermarkBtn, true);
     
@@ -288,7 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Show support modal and proceed with watermark removal
    */
   function handleRemoveWatermarkClick() {
-    if (!watermarkRemoved) {
+    if (!watermarkRemoved && isChromeAvailable()) {
       const modal = createSupportModal();
       document.body.appendChild(modal);
       setTimeout(() => {
@@ -383,6 +412,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Regenerate using explicit text value instead of fetching from storage
   function regenerateWithSettingsUsingText(textValue) {
+    if (!isChromeAvailable()) {
+      msg.textContent = "Settings updated (preview only)";
+      return;
+    }
     msg.textContent = "Updating with new settings...";
     disableExportButtons();
     chrome.runtime.sendMessage({
@@ -421,15 +454,17 @@ document.addEventListener("DOMContentLoaded", () => {
     inlineEditor.style.fontSize = `${currentFontSize}px`;
     // Default to white; adjust based on stored gradient for parity with canvas
     inlineEditor.style.color = '#ffffff';
-    chrome.storage.local.get(["currentGradient"], (data) => {
-      try {
-        const grad = data && data.currentGradient;
-        if (grad && grad[0]) {
-          const brightness = getBrightness(grad[0]);
-          inlineEditor.style.color = brightness > 200 ? '#000000' : '#ffffff';
-        }
-      } catch (_) {}
-    });
+    if (isChromeAvailable()) {
+      chrome.storage.local.get(["currentGradient"], (data) => {
+        try {
+          const grad = data && data.currentGradient;
+          if (grad && grad[0]) {
+            const brightness = getBrightness(grad[0]);
+            inlineEditor.style.color = brightness > 200 ? '#000000' : '#ffffff';
+          }
+        } catch (e) {}
+      });
+    }
   }
 
   function placeCaretAtEnd(el) {
@@ -442,18 +477,23 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function openInlineEditor() {
-    chrome.storage.local.get(["quoteText"], (data) => {
-      currentText = (data && data.quoteText) || currentText || "";
+    if (isChromeAvailable()) {
+      chrome.storage.local.get(["quoteText"], (data) => {
+        currentText = (data && data.quoteText) || currentText || "";
+        inlineEditor.textContent = currentText;
+        syncInlineEditorStyles();
+        inlineEditing = true;
+        inlineEditor.classList.add('active');
+        if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
+      });
+    } else {
+      currentText = currentText || "";
       inlineEditor.textContent = currentText;
       syncInlineEditorStyles();
       inlineEditing = true;
       inlineEditor.classList.add('active');
       if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
-      setTimeout(() => {
-        inlineEditor.focus();
-        placeCaretAtEnd(inlineEditor);
-      }, 0);
-    });
+    }
   }
 
   function closeInlineEditor() {
@@ -550,7 +590,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function closeFontPicker(modal) {
     modal.classList.add('closing');
     setTimeout(() => {
-      document.body.removeChild(modal);
+      if (modal && modal.parentNode) {
+        document.body.removeChild(modal);
+      }
     }, 300);
   }
   
@@ -623,21 +665,29 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data === 'random') {
           // Clear stored gradient to enable random generation
           currentGradientChoice = null;
-          chrome.storage.local.remove('currentGradient', () => {
+          if (isChromeAvailable()) {
+            chrome.storage.local.remove('currentGradient', () => {
+              regenerateWithSettings();
+              showNotification('Background set to random', 'success');
+              if (inlineEditing) setTimeout(() => syncInlineEditorStyles(), 0);
+            });
+          } else {
             regenerateWithSettings();
-            showNotification('Background set to random', 'success');
-            if (inlineEditing) setTimeout(() => syncInlineEditorStyles(), 0);
-          });
+          }
         } else {
           try {
             const colors = JSON.parse(data);
             currentGradientChoice = colors;
             // Persist chosen gradient so background.js uses it
-            chrome.storage.local.set({ currentGradient: colors }, () => {
+            if (isChromeAvailable()) {
+              chrome.storage.local.set({ currentGradient: colors }, () => {
+                regenerateWithSettings();
+                showNotification('Background updated!', 'success');
+                if (inlineEditing) setTimeout(() => syncInlineEditorStyles(), 0);
+              });
+            } else {
               regenerateWithSettings();
-              showNotification('Background updated!', 'success');
-              if (inlineEditing) setTimeout(() => syncInlineEditorStyles(), 0);
-            });
+            }
           } catch (e) {}
         }
         close();
@@ -701,6 +751,10 @@ document.addEventListener("DOMContentLoaded", () => {
    * Regenerate image with current font and size settings
    */
   function regenerateWithSettings() {
+    if (!isChromeAvailable()) {
+      msg.textContent = "Settings updated (preview only)";
+      return;
+    }
     chrome.storage.local.get(["quoteText"], (data) => {
       if (data.quoteText) {
         msg.textContent = "Updating with new settings...";
@@ -774,7 +828,7 @@ document.addEventListener("DOMContentLoaded", () => {
   inlineEditor.addEventListener('input', () => {
     const newText = inlineEditor.textContent || '';
     currentText = newText;
-    chrome.storage.local.set({ quoteText: newText });
+    if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
     debounceRegenerateWithNewText();
   });
 
@@ -788,7 +842,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
-});
+})();
 
 /**
  * Initialize gentle physics-like movement for all bubbles and blobs
