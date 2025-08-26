@@ -61,8 +61,8 @@
         border: 1px solid rgba(255, 255, 255, 0.2);
         animation: float 6s ease-in-out infinite;
         transition: transform 0.5s ease-out;
-        cursor: pointer;
-        pointer-events: all;
+        cursor: default;
+        pointer-events: none;
       }
       
       /* Floating animation */
@@ -173,8 +173,8 @@
         border: 1px solid rgba(255, 255, 255, 0.15);
         animation: blob-morph 8s ease-in-out infinite;
         transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        cursor: pointer;
-        pointer-events: all;
+        cursor: default;
+        pointer-events: none;
       }
       
       /* Blob morphing animation */
@@ -488,11 +488,12 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), transparent 60%);
         border-radius: 50px;
         opacity: 0;
         transition: opacity 0.4s ease;
         z-index: 1;
+        pointer-events: none;
       }
       
       .quick-edit-btn:hover {
@@ -607,12 +608,12 @@
       /* Panel button hover effects */
       .panel-btn:hover {
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
-        transform: translateX(-5px) scale(1.05);
+        transform: scale(1.05);
         box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
       }
       
       .panel-btn:active {
-        transform: translateX(-5px) scale(0.98);
+        transform: scale(0.98);
       }
       
       /* Done button special styling */
