@@ -18,6 +18,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const backgroundBtn = document.getElementById("backgroundBtn");           // Background selection button
   const editTextBtn = document.getElementById("editTextBtn");               // Edit text button
   const inlineEditor = document.getElementById("inlineEditor");             // Inline editor overlay
+  const inlineDoneContainer = document.getElementById("inlineDoneContainer"); // Inline Done container
+  const inlineDoneBtn = document.getElementById("inlineDoneBtn");             // Inline Done button
   
   // State variables
   let currentImageData = null;
@@ -446,6 +448,7 @@ document.addEventListener("DOMContentLoaded", () => {
       syncInlineEditorStyles();
       inlineEditing = true;
       inlineEditor.classList.add('active');
+      if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
       setTimeout(() => {
         inlineEditor.focus();
         placeCaretAtEnd(inlineEditor);
@@ -457,6 +460,7 @@ document.addEventListener("DOMContentLoaded", () => {
     inlineEditing = false;
     inlineEditor.classList.remove('active');
     inlineEditor.blur();
+    if (inlineDoneContainer) inlineDoneContainer.style.display = 'none';
   }
   
   /**
@@ -761,6 +765,7 @@ document.addEventListener("DOMContentLoaded", () => {
   increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
   doneBtn.addEventListener("click", handleDone);
   editTextBtn.addEventListener("click", handleEditText);
+  if (inlineDoneBtn) inlineDoneBtn.addEventListener('click', handleDone);
   
   // Open inline editor when image is clicked
   img.addEventListener("click", openInlineEditor);

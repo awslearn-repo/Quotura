@@ -326,6 +326,16 @@
       #inlineEditor.active {
         display: block;
       }
+     
+      /* Inline done button container */
+      .inline-done-container {
+        margin-top: 12px;
+        display: none;
+      }
+      
+      .inline-done-btn {
+        min-width: 150px;
+      }
       
       /* Export buttons container with glassmorphism */
       .export-buttons {
@@ -1214,6 +1224,10 @@
       <img id="image" src="" alt="Beautified Quote" />
       <div id="inlineEditor" contenteditable="true" aria-label="Edit quote text"></div>
     </div>
+   
+   <div id="inlineDoneContainer" class="inline-done-container">
+     <button id="inlineDoneBtn" class="export-btn btn-success inline-done-btn">✅ Done</button>
+   </div>
     
     <!-- Export buttons for various download options -->
     <div class="export-buttons">
