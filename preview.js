@@ -484,6 +484,8 @@
         syncInlineEditorStyles();
         inlineEditing = true;
         inlineEditor.classList.add('active');
+        // Hide the underlying image while editing to prevent visual overlap
+        if (img) img.classList.add('editing-hidden');
         if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
       });
     } else {
@@ -492,6 +494,7 @@
       syncInlineEditorStyles();
       inlineEditing = true;
       inlineEditor.classList.add('active');
+      if (img) img.classList.add('editing-hidden');
       if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
     }
   }
@@ -500,6 +503,7 @@
     inlineEditing = false;
     inlineEditor.classList.remove('active');
     inlineEditor.blur();
+    if (img) img.classList.remove('editing-hidden');
     if (inlineDoneContainer) inlineDoneContainer.style.display = 'none';
   }
   
@@ -831,6 +835,17 @@
     if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
     debounceRegenerateWithNewText();
   });
+
+  // When entering/leaving inline editing, toggle a pulse cue on the inline Done button
+  const observer = new MutationObserver(() => {
+    if (!inlineDoneBtn) return;
+    if (inlineEditor.classList.contains('active')) {
+      inlineDoneBtn.classList.add('pulse');
+    } else {
+      inlineDoneBtn.classList.remove('pulse');
+    }
+  });
+  observer.observe(inlineEditor, { attributes: true, attributeFilter: ['class'] });
 
   // Close inline editor with Escape
   document.addEventListener('keydown', (e) => {
