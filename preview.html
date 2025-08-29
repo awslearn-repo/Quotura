@@ -301,6 +301,29 @@
         align-items: center;
       }
       
+      /* Background layer shown during inline editing */
+      #editBackground {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 85%;
+        max-width: 85%;
+        height: calc(70vh);
+        border-radius: 20px;
+        display: none;
+        z-index: 2;
+        box-shadow: 
+          0 20px 40px rgba(0, 0, 0, 0.3),
+          0 0 0 1px rgba(255, 255, 255, 0.1),
+          0 0 60px rgba(255, 255, 255, 0.1);
+        border: 2px solid rgba(255, 255, 255, 0.2);
+      }
+      
+      #editBackground.active {
+        display: block;
+      }
+      
       /* Inline text editor positioned over the image */
       #inlineEditor {
         position: absolute;
@@ -320,7 +343,7 @@
         word-wrap: break-word;
         text-shadow: 0 1px 2px rgba(0,0,0,0.3);
         display: none;
-        z-index: 5;
+        z-index: 3;
         cursor: text;
       }
       
@@ -1225,6 +1248,7 @@
     <!-- Container for the generated quote image -->
     <div id="imageContainer">
       <img id="image" src="" alt="Beautified Quote" />
+      <div id="editBackground" aria-hidden="true"></div>
       <div id="inlineEditor" contenteditable="true" aria-label="Edit quote text"></div>
     </div>
    
