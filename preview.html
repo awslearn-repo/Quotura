@@ -301,12 +301,6 @@
         align-items: center;
       }
       
-      /* While editing, fade the image to avoid overlap/perceived blur */
-      #image.editing-hidden {
-        opacity: 0;
-        transition: opacity 0.2s ease;
-      }
-      
       /* Inline text editor positioned over the image */
       #inlineEditor {
         position: absolute;
@@ -332,23 +326,6 @@
       
       #inlineEditor.active {
         display: block;
-      }
-      
-      /* Subtle editing hint */
-      #inlineEditor.active::after {
-        content: "Press Done to apply";
-        position: absolute;
-        left: 50%;
-        bottom: -28px;
-        transform: translateX(-50%);
-        font-size: 12px;
-        font-weight: normal;
-        color: rgba(255,255,255,0.85);
-        background: rgba(0,0,0,0.35);
-        padding: 4px 8px;
-        border-radius: 8px;
-        pointer-events: none;
-        white-space: nowrap;
       }
      
       /* Inline done button container */
@@ -640,24 +617,15 @@
         transform: scale(0.98);
       }
       
-      /* Done button: neutral styling and subtle pulse when inline editor is active */
+      /* Done button special styling */
       .done-btn {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        border-color: rgba(118, 75, 162, 0.4);
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%) !important;
+        border-color: rgba(67, 233, 123, 0.5);
       }
       
-      .inline-done-btn {
-        position: relative;
-      }
-      
-      .inline-done-btn.pulse {
-        animation: subtlePulse 1.2s ease-in-out infinite;
-      }
-      
-      @keyframes subtlePulse {
-        0% { transform: translateY(0) scale(1); box-shadow: 0 6px 20px rgba(118, 75, 162, 0.0); }
-        50% { transform: translateY(-1px) scale(1.02); box-shadow: 0 6px 20px rgba(118, 75, 162, 0.25); }
-        100% { transform: translateY(0) scale(1); box-shadow: 0 6px 20px rgba(118, 75, 162, 0.0); }
+      .done-btn:hover {
+        background: linear-gradient(135deg, #38f9d7 0%, #43e97b 100%) !important;
+        box-shadow: 0 5px 15px rgba(67, 233, 123, 0.4);
       }
       
       
@@ -1248,7 +1216,7 @@
           </button>
         </div>
         <button id="doneBtn" class="panel-btn done-btn">
-          <span class="btn-icon">✎</span>
+          <span class="btn-icon">✅</span>
           <span class="btn-text">Done</span>
         </button>
       </div>
@@ -1261,7 +1229,7 @@
     </div>
    
    <div id="inlineDoneContainer" class="inline-done-container">
-     <button id="inlineDoneBtn" class="export-btn btn-secondary inline-done-btn" aria-live="polite">Done</button>
+     <button id="inlineDoneBtn" class="export-btn btn-success inline-done-btn">✅ Done</button>
    </div>
     
     <!-- Export buttons for various download options -->

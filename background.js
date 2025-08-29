@@ -136,30 +136,28 @@ function generateSVGQuote(text, gradient, includeWatermark = true) {
  * @returns {string[]} Array of text lines that fit within maxWidth
  */
 function wrapText(ctx, text, maxWidth) {
-  // Respect explicit newlines from user input by splitting first
-  const paragraphs = String(text).split(/\r?\n/);
-  const wrapped = [];
-
-  for (let p = 0; p < paragraphs.length; p++) {
-    const words = paragraphs[p].split(" ");
-    let line = "";
+  const words = text.split(" ");
+  let line = "";
+  const lines = [];
+  
+  // Process each word and build lines
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
     
-    for (let n = 0; n < words.length; n++) {
-      const word = words[n];
-      const testLine = line + word + (n < words.length ? " " : "");
-
-      if (ctx.measureText(testLine).width > maxWidth && line) {
-        wrapped.push(line.trim());
-        line = word + " ";
-      } else {
-        line = testLine;
-      }
+    // Check if adding this word exceeds maxWidth
+    if (ctx.measureText(testLine).width > maxWidth && n > 0) {
+      // Current line is full, save it and start new line
+      lines.push(line.trim());
+      line = words[n] + " ";
+    } else {
+      // Word fits, add it to current line
+      line = testLine;
     }
-
-    wrapped.push(line.trim());
   }
-
-  return wrapped;
+  
+  // Add the final line
+  lines.push(line.trim());
+  return lines;
 }
 
 /**
