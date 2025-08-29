@@ -858,7 +858,7 @@
     // If inline editor is open, persist the latest text (including newlines)
     // and trigger a final regenerate before closing the editor
     if (inlineEditing && inlineEditor) {
-      const finalText = inlineEditor.textContent || "";
+      const finalText = (inlineEditor.innerText || "").replace(/\r\n/g, '\n');
       currentText = finalText;
       if (isChromeAvailable()) chrome.storage.local.set({ quoteText: finalText });
       regenerateWithSettingsUsingText(finalText);
@@ -904,7 +904,7 @@
   
   // Inline editor live update
   inlineEditor.addEventListener('input', () => {
-    const newText = inlineEditor.textContent || '';
+    const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
     currentText = newText;
     if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
     debounceRegenerateWithNewText();
