@@ -855,6 +855,15 @@
    * Handle Done button click - hides edit panel
    */
   function handleDone() {
+    // If inline editor is open, persist the latest text (including newlines)
+    // and trigger a final regenerate before closing the editor
+    if (inlineEditing && inlineEditor) {
+      const finalText = inlineEditor.textContent || "";
+      currentText = finalText;
+      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: finalText });
+      regenerateWithSettingsUsingText(finalText);
+    }
+
     if (editMode) {
       // Exit edit mode with animation
       editPanel.classList.add("exiting");
