@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Quotura",
-  "version": "2.6",
+  "version": "3.0",
   "description": "Highlight text, beautify it, and download as an image.",
   "permissions": ["contextMenus", "downloads", "storage"],
   "background": {
