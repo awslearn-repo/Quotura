@@ -65,7 +65,31 @@
     }
   }
 
+  // Ensure edit overlays match the rendered image size exactly
+  function syncEditOverlayToImage() {
+    try {
+      if (!img || !editBackground || !inlineEditor) return;
+      const imageWidth = img.clientWidth;
+      const imageHeight = img.clientHeight;
+      if (!imageWidth || !imageHeight) return;
+      // Match background size to image
+      editBackground.style.width = `${imageWidth}px`;
+      editBackground.style.height = `${imageHeight}px`;
+      // Keep editor width aligned with image for consistent typing area
+      inlineEditor.style.width = `${imageWidth}px`;
+      inlineEditor.style.maxWidth = `${imageWidth}px`;
+    } catch (_) {}
+  }
+
+  // Keep overlays in sync with image dimensions on load and resize
+  if (img) {
+    img.addEventListener('load', syncEditOverlayToImage, { once: false });
+  }
+  window.addEventListener('resize', syncEditOverlayToImage, { passive: true });
+
   function showEditingVisuals() {
+    // Ensure overlay matches current image size before showing
+    syncEditOverlayToImage();
     if (editBackground) editBackground.classList.add('active');
     if (img) img.style.visibility = 'hidden';
     updateEditBackgroundGradient();
