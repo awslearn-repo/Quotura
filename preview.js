@@ -24,6 +24,7 @@
   const inlineEditor = document.getElementById("inlineEditor");             // Inline editor overlay
   const inlineDoneContainer = document.getElementById("inlineDoneContainer"); // Inline Done container
   const inlineDoneBtn = document.getElementById("inlineDoneBtn");             // Inline Done button
+  const editBackground = document.getElementById("editBackground");          // Background layer during editing
   
   // State variables
   let currentImageData = null;
@@ -35,6 +36,45 @@
   let currentText = null;           // Current editable text content
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
+
+  // Update background layer to reflect current gradient selection
+  function updateEditBackgroundGradient() {
+    const applyGradient = (colors) => {
+      try {
+        if (Array.isArray(colors) && colors.length >= 2) {
+          editBackground.style.background = `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 100%)`;
+        } else {
+          // Fallback gradient
+          editBackground.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        }
+      } catch (e) {
+        editBackground.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+      }
+    };
+    if (!editBackground) return;
+    if (currentGradientChoice) {
+      applyGradient(currentGradientChoice);
+      return;
+    }
+    if (isChromeAvailable()) {
+      chrome.storage.local.get(["currentGradient"], (data) => {
+        applyGradient((data && data.currentGradient) || null);
+      });
+    } else {
+      applyGradient(null);
+    }
+  }
+
+  function showEditingVisuals() {
+    if (editBackground) editBackground.classList.add('active');
+    if (img) img.style.visibility = 'hidden';
+    updateEditBackgroundGradient();
+  }
+
+  function hideEditingVisuals() {
+    if (editBackground) editBackground.classList.remove('active');
+    if (img) img.style.visibility = 'visible';
+  }
 
   function isChromeAvailable() {
     try {
@@ -485,6 +525,8 @@
         inlineEditing = true;
         inlineEditor.classList.add('active');
         if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
+        showEditingVisuals();
+        placeCaretAtEnd(inlineEditor);
       });
     } else {
       currentText = currentText || "";
@@ -493,6 +535,8 @@
       inlineEditing = true;
       inlineEditor.classList.add('active');
       if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
+      showEditingVisuals();
+      placeCaretAtEnd(inlineEditor);
     }
   }
 
@@ -501,6 +545,7 @@
     inlineEditor.classList.remove('active');
     inlineEditor.blur();
     if (inlineDoneContainer) inlineDoneContainer.style.display = 'none';
+    hideEditingVisuals();
   }
   
   /**
