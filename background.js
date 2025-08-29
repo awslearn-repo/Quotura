@@ -128,36 +128,43 @@ function generateSVGQuote(text, gradient, includeWatermark = true) {
 }
 
 /**
- * Text wrapping algorithm for canvas rendering
- * Breaks text into lines that fit within specified width constraints
+ * Text wrapping algorithm for canvas/SVG rendering
+ * Preserves user-inserted newlines and wraps each paragraph to the given width
  * @param {CanvasRenderingContext2D} ctx - Canvas context for text measurement
- * @param {string} text - Text to wrap
+ * @param {string} text - Text to wrap (may include \n)
  * @param {number} maxWidth - Maximum width in pixels for each line
- * @returns {string[]} Array of text lines that fit within maxWidth
+ * @returns {string[]} Array of text lines that fit within maxWidth, preserving blank lines
  */
 function wrapText(ctx, text, maxWidth) {
-  const words = text.split(" ");
-  let line = "";
-  const lines = [];
-  
-  // Process each word and build lines
-  for (let n = 0; n < words.length; n++) {
-    const testLine = line + words[n] + " ";
-    
-    // Check if adding this word exceeds maxWidth
-    if (ctx.measureText(testLine).width > maxWidth && n > 0) {
-      // Current line is full, save it and start new line
-      lines.push(line.trim());
-      line = words[n] + " ";
-    } else {
-      // Word fits, add it to current line
-      line = testLine;
+  const allLines = [];
+  const paragraphs = String(text).split(/\r?\n/);
+
+  paragraphs.forEach((paragraph) => {
+    // Preserve intentional blank lines
+    if (paragraph.length === 0) {
+      allLines.push("");
+      return;
     }
-  }
-  
-  // Add the final line
-  lines.push(line.trim());
-  return lines;
+
+    const words = paragraph.split(/\s+/);
+    let currentLine = "";
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const testLine = currentLine ? currentLine + " " + word : word;
+
+      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+        allLines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+
+    allLines.push(currentLine);
+  });
+
+  return allLines;
 }
 
 /**
