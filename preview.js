@@ -39,26 +39,40 @@
 
   // Update background layer to reflect current gradient selection
   function updateEditBackgroundGradient() {
+    if (!editBackground) return;
     const applyGradient = (colors) => {
       try {
         if (Array.isArray(colors) && colors.length >= 2) {
           editBackground.style.background = `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 100%)`;
         } else {
-          // Fallback gradient
           editBackground.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
         }
-      } catch (e) {
+      } catch (_) {
         editBackground.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
       }
     };
-    if (!editBackground) return;
+    const applyImage = (url) => {
+      try {
+        if (url) {
+          editBackground.style.background = `url(${url}) center/cover no-repeat`;
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    };
     if (currentGradientChoice) {
       applyGradient(currentGradientChoice);
       return;
     }
     if (isChromeAvailable()) {
-      chrome.storage.local.get(["currentGradient"], (data) => {
-        applyGradient((data && data.currentGradient) || null);
+      chrome.storage.local.get(["customBackgroundImage", "currentGradient"], (data) => {
+        if (data && data.customBackgroundImage) {
+          if (!applyImage(data.customBackgroundImage)) {
+            applyGradient((data && data.currentGradient) || null);
+          }
+        } else {
+          applyGradient((data && data.currentGradient) || null);
+        }
       });
     } else {
       applyGradient(null);
@@ -695,6 +709,12 @@
     modal.className = 'gradient-picker-modal';
     
     const optionsHTML = [
+      `<div class="gradient-option upload-option" data-upload="true">
+        <div class="gradient-swatch" style="display:flex;align-items:center;justify-content:center;background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.15)); color:#333; font-weight:700;">
+          📁 Upload from device…
+        </div>
+        <div class="gradient-name">Upload from device…</div>
+      </div>`,
       `<div class="gradient-option random-option" data-colors="random">
         <div class="gradient-swatch" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)">RANDOM</div>
         <div class="gradient-name">Random</div>
@@ -723,22 +743,58 @@
     const closeBtn = modal.querySelector('.close-btn');
     const backdrop = modal.querySelector('.gradient-picker-backdrop');
     const options = modal.querySelectorAll('.gradient-option');
+    // Hidden file input for upload
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    modal.appendChild(fileInput);
     
     const close = () => closeGradientPicker(modal);
     closeBtn.addEventListener('click', close);
     backdrop.addEventListener('click', close);
     
-    options.forEach(option => {
-      option.addEventListener('click', () => {
-        const data = option.getAttribute('data-colors');
-        if (data === 'random') {
-          // Clear stored gradient to enable random generation
-          currentGradientChoice = null;
-          if (isChromeAvailable()) {
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        currentGradientChoice = null;
+        if (isChromeAvailable()) {
+          chrome.storage.local.set({ customBackgroundImage: dataUrl }, () => {
+            // Clear any stored gradient to favor the image background
             chrome.storage.local.remove('currentGradient', () => {
               regenerateWithSettings();
+              showNotification('Background image updated!', 'success');
+              setTimeout(() => updateEditBackgroundGradient(), 0);
+            });
+          });
+        }
+        close();
+      };
+      reader.readAsDataURL(file);
+    });
+
+    options.forEach(option => {
+      option.addEventListener('click', () => {
+        if (option.getAttribute('data-upload') === 'true') {
+          // Trigger file picker
+          fileInput.click();
+          return;
+        }
+        const data = option.getAttribute('data-colors');
+        if (data === 'random') {
+          currentGradientChoice = null;
+          if (isChromeAvailable()) {
+            // Remove custom image and gradient to enable random
+            chrome.storage.local.remove(['customBackgroundImage', 'currentGradient'], () => {
+              regenerateWithSettings();
               showNotification('Background set to random', 'success');
-              if (inlineEditing) setTimeout(() => syncInlineEditorStyles(), 0);
+              setTimeout(() => {
+                updateEditBackgroundGradient();
+                if (inlineEditing) syncInlineEditorStyles();
+              }, 0);
             });
           } else {
             regenerateWithSettings();
@@ -747,17 +803,22 @@
           try {
             const colors = JSON.parse(data);
             currentGradientChoice = colors;
-            // Persist chosen gradient so background.js uses it
             if (isChromeAvailable()) {
+              // Persist gradient and clear any custom image
               chrome.storage.local.set({ currentGradient: colors }, () => {
-                regenerateWithSettings();
-                showNotification('Background updated!', 'success');
-                if (inlineEditing) setTimeout(() => syncInlineEditorStyles(), 0);
+                chrome.storage.local.remove('customBackgroundImage', () => {
+                  regenerateWithSettings();
+                  showNotification('Background updated!', 'success');
+                  setTimeout(() => {
+                    updateEditBackgroundGradient();
+                    if (inlineEditing) syncInlineEditorStyles();
+                  }, 0);
+                });
               });
             } else {
               regenerateWithSettings();
             }
-          } catch (e) {}
+          } catch (_) {}
         }
         close();
       });
