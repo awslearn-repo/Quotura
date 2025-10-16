@@ -23,16 +23,18 @@ chrome.contextMenus.onClicked.addListener((info) => {
 // Handle messages from preview tab for additional functionality
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "generateWithoutWatermark") {
-    // Get stored text and current gradient to maintain consistency
-    chrome.storage.local.get(["quoteText", "currentGradient"], (data) => {
-      if (data.quoteText && data.currentGradient) {
+    // Prefer custom image background if available
+    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+      if (data.quoteText && data.customBackgroundImage) {
+        generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
+          sendResponse({ imageData });
+        });
+      } else if (data.quoteText && data.currentGradient) {
         generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
           sendResponse({ imageData });
         });
-      } else {
-        // Fallback: if no gradient stored, use the original function (shouldn't happen)
-        console.warn("No currentGradient found, using fallback");
-        // This fallback ensures the extension continues working even if gradient data is lost
+      } else if (data.quoteText) {
+        // Fallback: if no gradient stored, use the original function
         generateQuoteImageData(data.quoteText, false).then((imageData) => {
           sendResponse({ imageData });
         });
@@ -42,9 +44,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === "generateSVG") {
-    // Generate SVG version of the quote
-    chrome.storage.local.get(["quoteText", "currentGradient"], (data) => {
-      if (data.quoteText) {
+    // Generate SVG version of the quote, preferring custom image background
+    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+      if (data.quoteText && data.customBackgroundImage) {
+        generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
+          sendResponse({ svgData });
+        });
+      } else if (data.quoteText) {
         const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
         sendResponse({ svgData });
       }
@@ -185,6 +191,150 @@ function getBrightness(hex) {
   // Calculate perceived brightness using standard luminance formula
   // Weights: Red=29.9%, Green=58.7%, Blue=11.4% (human eye sensitivity)
   return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
+// Load an ImageBitmap from a data URL
+async function loadImageBitmapFromDataUrl(dataUrl) {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return await createImageBitmap(blob);
+}
+
+// Draw an image to cover the canvas (like CSS background-size: cover)
+function drawImageCover(ctx, imageBitmap, targetWidth, targetHeight) {
+  const sourceWidth = imageBitmap.width;
+  const sourceHeight = imageBitmap.height;
+  const scale = Math.max(targetWidth / sourceWidth, targetHeight / sourceHeight);
+  const drawWidth = Math.round(sourceWidth * scale);
+  const drawHeight = Math.round(sourceHeight * scale);
+  const dx = Math.floor((targetWidth - drawWidth) / 2);
+  const dy = Math.floor((targetHeight - drawHeight) / 2);
+  ctx.drawImage(imageBitmap, dx, dy, drawWidth, drawHeight);
+}
+
+// Compute approximate average brightness of an image by downscaling
+async function computeAverageBrightnessFromImageBitmap(imageBitmap) {
+  const sampleWidth = 8;
+  const sampleHeight = 8;
+  const tmp = new OffscreenCanvas(sampleWidth, sampleHeight);
+  const tctx = tmp.getContext("2d");
+  drawImageCover(tctx, imageBitmap, sampleWidth, sampleHeight);
+  const imageData = tctx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+  let sum = 0;
+  for (let i = 0; i < imageData.length; i += 4) {
+    const r = imageData[i];
+    const g = imageData[i + 1];
+    const b = imageData[i + 2];
+    sum += (r * 299 + g * 587 + b * 114) / 1000;
+  }
+  return sum / (imageData.length / 4);
+}
+
+function pickTextColorFromBrightness(avgBrightness) {
+  return avgBrightness > 200 ? "#000000" : "#ffffff";
+}
+
+function addWatermarkForBrightness(ctx, width, height, avgBrightness) {
+  ctx.save();
+  const watermarkColor = avgBrightness > 150 ? "rgba(0, 0, 0, 0.6)" : "rgba(255, 255, 255, 0.6)";
+  ctx.fillStyle = watermarkColor;
+  ctx.font = "bold 16px Arial";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  ctx.fillText("made with Quotura", width - 15, height - 15);
+  ctx.restore();
+}
+
+// Generate image using a custom background image (cover fit)
+async function generateQuoteImageDataWithImage(text, imageDataUrl, includeWatermark = true, font = "Arial", fontSize = 28) {
+  return new Promise(async (resolve) => {
+    try {
+      const canvas = new OffscreenCanvas(800, 400);
+      const ctx = canvas.getContext("2d");
+
+      const bitmap = await loadImageBitmapFromDataUrl(imageDataUrl);
+      drawImageCover(ctx, bitmap, canvas.width, canvas.height);
+
+      const avgBrightness = await computeAverageBrightnessFromImageBitmap(bitmap);
+      const textColor = pickTextColorFromBrightness(avgBrightness);
+
+      ctx.fillStyle = textColor;
+      ctx.font = `bold ${fontSize}px ${font}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      const lines = wrapText(ctx, text, 720);
+      const lineHeight = Math.round(fontSize * 1.3);
+      const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+      lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
+
+      if (includeWatermark) {
+        addWatermarkForBrightness(ctx, canvas.width, canvas.height, avgBrightness);
+      }
+
+      const blob = await canvas.convertToBlob();
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    } catch (e) {
+      // Fallback to gradient generation if image fails
+      generateQuoteImageDataWithSettings(text, null, includeWatermark, font, fontSize).then(resolve);
+    }
+  });
+}
+
+// Generate SVG using a custom background image (cover fit)
+async function generateSVGQuoteFromImage(text, imageDataUrl, includeWatermark = true) {
+  // Estimate brightness to choose text & watermark colors
+  try {
+    const bitmap = await loadImageBitmapFromDataUrl(imageDataUrl);
+    const avgBrightness = await computeAverageBrightnessFromImageBitmap(bitmap);
+    const textColor = pickTextColorFromBrightness(avgBrightness);
+
+    // Measure wrapped text using a temp canvas for consistency
+    const tempCanvas = new OffscreenCanvas(800, 400);
+    const tempCtx = tempCanvas.getContext("2d");
+    tempCtx.font = "bold 32px Arial";
+    const wrappedLines = wrapText(tempCtx, text, 720);
+    const lineHeight = 40;
+    const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
+
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    let svgContent = `
+    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <image href="${imageDataUrl}" x="0" y="0" width="800" height="400" preserveAspectRatio="xMidYMid slice" />
+      ${wrappedLines.map((line, index) => {
+        const y = startY + index * lineHeight;
+        return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="${textColor}">${esc(line)}</text>`;
+      }).join('\n      ')}
+    `;
+
+    if (includeWatermark) {
+      const watermarkColor = avgBrightness > 150 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
+      svgContent += `
+        <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
+      `;
+    }
+
+    svgContent += `\n    </svg>`;
+    return `data:image/svg+xml;base64,${btoa(svgContent)}`;
+  } catch (_) {
+    // Fallback: simple white text over embedded image
+    const tempCanvas = new OffscreenCanvas(800, 400);
+    const tempCtx = tempCanvas.getContext("2d");
+    tempCtx.font = "bold 32px Arial";
+    const wrappedLines = wrapText(tempCtx, text, 720);
+    const lineHeight = 40;
+    const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let svgContent = `
+    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <image href="${imageDataUrl}" x="0" y="0" width="800" height="400" preserveAspectRatio="xMidYMid slice" />
+      ${wrappedLines.map((line, index) => `<text x="400" y="${startY + index * lineHeight}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="#ffffff">${esc(line)}</text>`).join('\n      ')}
+    </svg>`;
+    return `data:image/svg+xml;base64,${btoa(svgContent)}`;
+  }
 }
 
 /**
@@ -561,8 +711,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "generateWithoutWatermark") {
     // Small delay to ensure currentGradient is properly stored
     setTimeout(() => {
-      chrome.storage.local.get(["quoteText", "currentGradient"], (data) => {
-        if (data.quoteText && data.currentGradient) {
+      chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+        if (data.quoteText && data.customBackgroundImage) {
+          generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
+            sendResponse({ imageData: imageData });
+          });
+        } else if (data.quoteText && data.currentGradient) {
           generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
             sendResponse({ imageData: imageData });
           });
@@ -578,8 +732,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === "generateSVG") {
-    chrome.storage.local.get(["quoteText", "currentGradient"], (data) => {
-      if (data.quoteText && data.currentGradient) {
+    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+      if (data.quoteText && data.customBackgroundImage) {
+        generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
+          sendResponse({ svgData: svgData });
+        });
+      } else if (data.quoteText && data.currentGradient) {
         const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
         sendResponse({ svgData: svgData });
       }
@@ -588,8 +746,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === "regenerateQuote") {
-    chrome.storage.local.get(["currentGradient"], (data) => {
-      if (data.currentGradient) {
+    chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
+      if (data.customBackgroundImage) {
+        generateQuoteImageDataWithImage(request.text, data.customBackgroundImage, request.includeWatermark).then((imageData) => {
+          chrome.storage.local.set({ quoteImage: imageData });
+          sendResponse({ imageData: imageData });
+        });
+      } else if (data.currentGradient) {
         generateQuoteImageDataWithGradient(request.text, data.currentGradient, request.includeWatermark).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
@@ -606,8 +769,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === "regenerateWithSettings") {
-    chrome.storage.local.get(["currentGradient"], (data) => {
-      if (data.currentGradient) {
+    chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
+      if (data.customBackgroundImage) {
+        generateQuoteImageDataWithImage(request.text, data.customBackgroundImage, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+          chrome.storage.local.set({ quoteImage: imageData });
+          sendResponse({ imageData: imageData });
+        });
+      } else if (data.currentGradient) {
         generateQuoteImageDataWithSettings(request.text, data.currentGradient, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
@@ -629,11 +797,23 @@ function createQuoteImage(text) {
   chrome.storage.local.remove(['quoteImage'], () => {
     // Store the original text for later use
     chrome.storage.local.set({ quoteText: text });
-    
-    // Generate image with watermark by default, but don't auto-download
-    generateQuoteImageData(text, true).then((imageData) => {
-      // Only save image data in Chrome storage for preview tab access
-      chrome.storage.local.set({ quoteImage: imageData });
+
+    // Prefer custom image or persisted gradient if available
+    chrome.storage.local.get(['customBackgroundImage', 'currentGradient'], (data) => {
+      if (data && data.customBackgroundImage) {
+        generateQuoteImageDataWithImage(text, data.customBackgroundImage, true).then((imageData) => {
+          chrome.storage.local.set({ quoteImage: imageData });
+        });
+      } else if (data && data.currentGradient) {
+        generateQuoteImageDataWithGradient(text, data.currentGradient, true).then((imageData) => {
+          chrome.storage.local.set({ quoteImage: imageData });
+        });
+      } else {
+        // Default behavior: generate with random gradient
+        generateQuoteImageData(text, true).then((imageData) => {
+          chrome.storage.local.set({ quoteImage: imageData });
+        });
+      }
     });
   });
 }
