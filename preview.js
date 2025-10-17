@@ -25,6 +25,7 @@
   const inlineDoneContainer = document.getElementById("inlineDoneContainer"); // Inline Done container
   const inlineDoneBtn = document.getElementById("inlineDoneBtn");             // Inline Done button
   const editBackground = document.getElementById("editBackground");          // Background layer during editing
+  const quoteInput = document.getElementById("quoteInput");                 // Textarea inside side panel
   
   // State variables
   let currentImageData = null;
@@ -102,16 +103,12 @@
   window.addEventListener('resize', syncEditOverlayToImage, { passive: true });
 
   function showEditingVisuals() {
-    // Ensure overlay matches current image size before showing
-    syncEditOverlayToImage();
-    if (editBackground) editBackground.classList.add('active');
-    if (img) img.style.visibility = 'hidden';
-    updateEditBackgroundGradient();
+    // Reserve space for the right sidebar while keeping preview visible
+    document.body.classList.add('sidebar-open');
   }
 
   function hideEditingVisuals() {
-    if (editBackground) editBackground.classList.remove('active');
-    if (img) img.style.visibility = 'visible';
+    document.body.classList.remove('sidebar-open');
   }
 
   function isChromeAvailable() {
@@ -461,6 +458,18 @@
       editMode = true;
       editPanel.classList.add("active");
       quickEditBtn.style.opacity = "0.7";
+      showEditingVisuals();
+      // Prefill textarea with current text
+      if (quoteInput) {
+        if (isChromeAvailable()) {
+          chrome.storage.local.get(["quoteText"], (data) => {
+            const val = (data && data.quoteText) || currentText || "";
+            quoteInput.value = val;
+          });
+        } else {
+          quoteInput.value = currentText || "";
+        }
+      }
     }
   }
 
@@ -528,21 +537,7 @@
   }
 
   function syncInlineEditorStyles() {
-    inlineEditor.style.fontFamily = currentFont;
-    inlineEditor.style.fontSize = `${currentFontSize}px`;
-    // Default to white; adjust based on stored gradient for parity with canvas
-    inlineEditor.style.color = '#ffffff';
-    if (isChromeAvailable()) {
-      chrome.storage.local.get(["currentGradient"], (data) => {
-        try {
-          const grad = data && data.currentGradient;
-          if (grad && grad[0]) {
-            const brightness = getBrightness(grad[0]);
-            inlineEditor.style.color = brightness > 200 ? '#000000' : '#ffffff';
-          }
-        } catch (e) {}
-      });
-    }
+    // No-op in side-panel mode; maintained for API compatibility
   }
 
   function placeCaretAtEnd(el) {
@@ -555,34 +550,30 @@
   }
 
   function openInlineEditor() {
+    // Show side panel and focus textarea instead of inline overlay
+    handleQuickEdit();
+    if (!quoteInput) return;
+    const setAndFocus = (value) => {
+      quoteInput.value = value;
+      quoteInput.focus();
+      try {
+        const len = quoteInput.value.length;
+        quoteInput.setSelectionRange(len, len);
+      } catch (_) {}
+    };
     if (isChromeAvailable()) {
       chrome.storage.local.get(["quoteText"], (data) => {
         currentText = (data && data.quoteText) || currentText || "";
-        inlineEditor.textContent = currentText;
-        syncInlineEditorStyles();
-        inlineEditing = true;
-        inlineEditor.classList.add('active');
-        if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
-        showEditingVisuals();
-        placeCaretAtEnd(inlineEditor);
+        setAndFocus(currentText);
       });
     } else {
       currentText = currentText || "";
-      inlineEditor.textContent = currentText;
-      syncInlineEditorStyles();
-      inlineEditing = true;
-      inlineEditor.classList.add('active');
-      if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
-      showEditingVisuals();
-      placeCaretAtEnd(inlineEditor);
+      setAndFocus(currentText);
     }
   }
 
   function closeInlineEditor() {
     inlineEditing = false;
-    inlineEditor.classList.remove('active');
-    inlineEditor.blur();
-    if (inlineDoneContainer) inlineDoneContainer.style.display = 'none';
     hideEditingVisuals();
   }
   
@@ -916,10 +907,9 @@
    * Handle Done button click - hides edit panel
    */
   function handleDone() {
-    // If inline editor is open, persist the latest text (including newlines)
-    // and trigger a final regenerate before closing the editor
-    if (inlineEditing && inlineEditor) {
-      const finalText = (inlineEditor.innerText || "").replace(/\r\n/g, '\n');
+    // Persist the latest text from side-panel textarea and regenerate
+    if (quoteInput) {
+      const finalText = (quoteInput.value || "").replace(/\r\n/g, '\n');
       currentText = finalText;
       if (isChromeAvailable()) chrome.storage.local.set({ quoteText: finalText });
       regenerateWithSettingsUsingText(finalText);
@@ -936,10 +926,7 @@
         quickEditBtn.style.opacity = "1";
       }, 400);
     }
-    // Also close inline editor if open
-    if (inlineEditing) {
-      closeInlineEditor();
-    }
+    hideEditingVisuals();
   }
    
    // Event listeners for export buttons
@@ -960,22 +947,24 @@
   editTextBtn.addEventListener("click", handleEditText);
   if (inlineDoneBtn) inlineDoneBtn.addEventListener('click', handleDone);
   
-  // Open inline editor when image is clicked
+  // Open side panel when image is clicked
   img.addEventListener("click", openInlineEditor);
   
-  // Inline editor live update
-  inlineEditor.addEventListener('input', () => {
-    const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
-    currentText = newText;
-    if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
-    debounceRegenerateWithNewText();
-  });
+  // Side-panel textarea live update (debounced)
+  if (quoteInput) {
+    quoteInput.addEventListener('input', () => {
+      const newText = (quoteInput.value || '').replace(/\r\n/g, '\n');
+      currentText = newText;
+      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
+      debounceRegenerateWithNewText();
+    });
+  }
 
-  // Close inline editor with Escape
+  // Close side panel with Escape
   document.addEventListener('keydown', (e) => {
-    if (inlineEditing && e.key === 'Escape') {
+    if (editMode && e.key === 'Escape') {
       e.preventDefault();
-      closeInlineEditor();
+      handleDone();
     }
   });
   
