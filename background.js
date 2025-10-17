@@ -24,18 +24,19 @@ chrome.contextMenus.onClicked.addListener((info) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "generateWithoutWatermark") {
     // Prefer custom image background if available
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
-        generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
+    chrome.storage.local.get(["quotura:quoteText", "quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+      const text = data["quotura:quoteText"] || data.quoteText;
+      if (text && data.customBackgroundImage) {
+        generateQuoteImageDataWithImage(text, data.customBackgroundImage, false).then((imageData) => {
           sendResponse({ imageData });
         });
-      } else if (data.quoteText && data.currentGradient) {
-        generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
+      } else if (text && data.currentGradient) {
+        generateQuoteImageDataWithGradient(text, data.currentGradient, false).then((imageData) => {
           sendResponse({ imageData });
         });
-      } else if (data.quoteText) {
+      } else if (text) {
         // Fallback: if no gradient stored, use the original function
-        generateQuoteImageData(data.quoteText, false).then((imageData) => {
+        generateQuoteImageData(text, false).then((imageData) => {
           sendResponse({ imageData });
         });
       }
@@ -45,8 +46,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   if (request.action === "generateSVG") {
     // Generate SVG version of the quote, preferring custom image background
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
+    chrome.storage.local.get(["quotura:quoteText", "quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+      const text = data["quotura:quoteText"] || data.quoteText;
+      if (text && data.customBackgroundImage) {
         generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
           sendResponse({ svgData });
         });
@@ -283,6 +285,165 @@ async function generateQuoteImageDataWithImage(text, imageDataUrl, includeWaterm
   });
 }
 
+// Generate image with transparent background
+async function generateQuoteImageDataTransparent(text, includeWatermark = true, font = "Arial", fontSize = 28, textColor = "#ffffff", alignment = "center") {
+  return new Promise(async (resolve) => {
+    try {
+      const canvas = new OffscreenCanvas(800, 400);
+      const ctx = canvas.getContext("2d");
+
+      // Clear canvas to transparent
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Parse and render HTML-formatted text
+      await renderFormattedText(ctx, text, font, fontSize, textColor, alignment, 800, 400);
+
+      if (includeWatermark) {
+        // Add watermark with semi-transparent background for visibility
+        ctx.save();
+        ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
+        ctx.fillRect(canvas.width - 200, canvas.height - 30, 200, 30);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.font = "bold 16px Arial";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        ctx.fillText("made with Quotura", canvas.width - 15, canvas.height - 15);
+        ctx.restore();
+      }
+
+      // Convert to PNG with transparency
+      const blob = await canvas.convertToBlob({ type: "image/png" });
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    } catch (e) {
+      console.error("Error generating transparent image:", e);
+      // Fallback to regular generation
+      generateQuoteImageDataWithSettings(text, null, includeWatermark, font, fontSize).then(resolve);
+    }
+  });
+}
+
+// Render HTML-formatted text on canvas
+async function renderFormattedText(ctx, htmlText, baseFont, baseFontSize, baseColor, alignment, canvasWidth, canvasHeight) {
+  // Parse HTML and create text segments with formatting
+  const segments = parseHTMLText(htmlText);
+  
+  // Calculate layout
+  const lineHeight = Math.round(baseFontSize * 1.3);
+  const maxWidth = canvasWidth - 80; // 40px margin on each side
+  const lines = [];
+  let currentLine = [];
+  let currentLineWidth = 0;
+  
+  // Group segments into lines
+  for (const segment of segments) {
+    const segmentWidth = measureTextWidth(ctx, segment.text, segment.font, segment.fontSize);
+    
+    if (currentLineWidth + segmentWidth > maxWidth && currentLine.length > 0) {
+      lines.push([...currentLine]);
+      currentLine = [segment];
+      currentLineWidth = segmentWidth;
+    } else {
+      currentLine.push(segment);
+      currentLineWidth += segmentWidth;
+    }
+  }
+  
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+  
+  // Calculate starting Y position
+  const startY = canvasHeight / 2 - ((lines.length - 1) * lineHeight) / 2;
+  
+  // Render each line
+  lines.forEach((line, lineIndex) => {
+    const y = startY + lineIndex * lineHeight;
+    let x = 40; // Start with left margin
+    
+    if (alignment === "center") {
+      const totalLineWidth = line.reduce((sum, segment) => sum + measureTextWidth(ctx, segment.text, segment.font, segment.fontSize), 0);
+      x = (canvasWidth - totalLineWidth) / 2;
+    } else if (alignment === "right") {
+      const totalLineWidth = line.reduce((sum, segment) => sum + measureTextWidth(ctx, segment.text, segment.font, segment.fontSize), 0);
+      x = canvasWidth - totalLineWidth - 40;
+    }
+    
+    // Render each segment in the line
+    line.forEach(segment => {
+      ctx.fillStyle = segment.color;
+      ctx.font = `${segment.bold ? 'bold' : 'normal'} ${segment.italic ? 'italic' : 'normal'} ${segment.fontSize}px ${segment.font}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      
+      ctx.fillText(segment.text, x, y);
+      x += measureTextWidth(ctx, segment.text, segment.font, segment.fontSize);
+    });
+  });
+}
+
+// Parse HTML text into segments with formatting
+function parseHTMLText(htmlText) {
+  const segments = [];
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = htmlText;
+  
+  function processNode(node, inheritedFormat = {}) {
+    const format = { ...inheritedFormat };
+    
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (node.textContent.trim()) {
+        segments.push({
+          text: node.textContent,
+          font: format.font || "Arial",
+          fontSize: format.fontSize || 28,
+          color: format.color || "#ffffff",
+          bold: format.bold || false,
+          italic: format.italic || false,
+          underline: format.underline || false
+        });
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const tagName = node.tagName.toLowerCase();
+      
+      switch (tagName) {
+        case 'b':
+        case 'strong':
+          format.bold = true;
+          break;
+        case 'i':
+        case 'em':
+          format.italic = true;
+          break;
+        case 'u':
+          format.underline = true;
+          break;
+        case 'span':
+          if (node.style.color) {
+            format.color = node.style.color;
+          }
+          break;
+      }
+      
+      // Process child nodes
+      Array.from(node.childNodes).forEach(child => processNode(child, format));
+    }
+  }
+  
+  processNode(tempDiv);
+  return segments;
+}
+
+// Measure text width with given font and size
+function measureTextWidth(ctx, text, font, fontSize) {
+  const originalFont = ctx.font;
+  ctx.font = `${fontSize}px ${font}`;
+  const width = ctx.measureText(text).width;
+  ctx.font = originalFont;
+  return width;
+}
+
 // Generate SVG using a custom background image (cover fit)
 async function generateSVGQuoteFromImage(text, imageDataUrl, includeWatermark = true) {
   // Estimate brightness to choose text & watermark colors
@@ -335,6 +496,81 @@ async function generateSVGQuoteFromImage(text, imageDataUrl, includeWatermark = 
     </svg>`;
     return `data:image/svg+xml;base64,${btoa(svgContent)}`;
   }
+}
+
+// Generate SVG with transparent background
+function generateSVGQuoteTransparent(text, includeWatermark = true, font = "Arial", fontSize = 28, textColor = "#ffffff", alignment = "center") {
+  // Parse HTML and create SVG text elements
+  const segments = parseHTMLText(text);
+  
+  // Group segments into lines
+  const tempCanvas = new OffscreenCanvas(800, 400);
+  const tempCtx = tempCanvas.getContext("2d");
+  const maxWidth = 720;
+  const lineHeight = Math.round(fontSize * 1.3);
+  const lines = [];
+  let currentLine = [];
+  let currentLineWidth = 0;
+  
+  for (const segment of segments) {
+    tempCtx.font = `${segment.bold ? 'bold' : 'normal'} ${segment.italic ? 'italic' : 'normal'} ${segment.fontSize}px ${segment.font}`;
+    const segmentWidth = tempCtx.measureText(segment.text).width;
+    
+    if (currentLineWidth + segmentWidth > maxWidth && currentLine.length > 0) {
+      lines.push([...currentLine]);
+      currentLine = [segment];
+      currentLineWidth = segmentWidth;
+    } else {
+      currentLine.push(segment);
+      currentLineWidth += segmentWidth;
+    }
+  }
+  
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+  
+  const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  let svgContent = `<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">\n`;
+  
+  lines.forEach((line, lineIndex) => {
+    const y = startY + lineIndex * lineHeight;
+    let x = 40;
+    
+    if (alignment === "center") {
+      const totalLineWidth = line.reduce((sum, segment) => {
+        tempCtx.font = `${segment.bold ? 'bold' : 'normal'} ${segment.italic ? 'italic' : 'normal'} ${segment.fontSize}px ${segment.font}`;
+        return sum + tempCtx.measureText(segment.text).width;
+      }, 0);
+      x = (800 - totalLineWidth) / 2;
+    } else if (alignment === "right") {
+      const totalLineWidth = line.reduce((sum, segment) => {
+        tempCtx.font = `${segment.bold ? 'bold' : 'normal'} ${segment.italic ? 'italic' : 'normal'} ${segment.fontSize}px ${segment.font}`;
+        return sum + tempCtx.measureText(segment.text).width;
+      }, 0);
+      x = 800 - totalLineWidth - 40;
+    }
+    
+    line.forEach(segment => {
+      const fontWeight = segment.bold ? 'bold' : 'normal';
+      const fontStyle = segment.italic ? 'italic' : 'normal';
+      const textDecoration = segment.underline ? 'underline' : 'none';
+      
+      svgContent += `    <text x="${x}" y="${y}" font-family="${segment.font}" font-size="${segment.fontSize}" font-weight="${fontWeight}" font-style="${fontStyle}" text-decoration="${textDecoration}" fill="${segment.color}">${esc(segment.text)}</text>\n`;
+      
+      tempCtx.font = `${fontWeight} ${fontStyle} ${segment.fontSize}px ${segment.font}`;
+      x += tempCtx.measureText(segment.text).width;
+    });
+  });
+
+  if (includeWatermark) {
+    svgContent += `    <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="rgba(0,0,0,0.6)" text-anchor="end">made with Quotura</text>\n`;
+  }
+
+  svgContent += `  </svg>`;
+  return `data:image/svg+xml;base64,${btoa(svgContent)}`;
 }
 
 /**
@@ -508,15 +744,10 @@ function generateQuoteImageDataWithSettings(text, selectedGradient, includeWater
 
     // Dynamic text color based on background brightness
     const brightness = getBrightness(finalGradient[0]);
-    ctx.fillStyle = brightness > 200 ? "#000000" : "#ffffff";
-    ctx.font = `bold ${fontSize}px ${font}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    const lines = wrapText(ctx, text, 720);
-    const lineHeight = Math.round(fontSize * 1.3); // Dynamic line height based on font size
-    const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
-    lines.forEach((line, i) => ctx.fillText(line, 400, startY + i * lineHeight));
+    const textColor = brightness > 200 ? "#000000" : "#ffffff";
+    
+    // Render formatted text
+    await renderFormattedText(ctx, text, font, fontSize, textColor, "center", 800, 400);
 
     // Add watermark if requested
     if (includeWatermark) {
@@ -711,8 +942,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "generateWithoutWatermark") {
     // Small delay to ensure currentGradient is properly stored
     setTimeout(() => {
-      chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-        if (data.quoteText && data.customBackgroundImage) {
+      chrome.storage.local.get(["quotura:quoteText", "quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+        const text = data["quotura:quoteText"] || data.quoteText;
+      if (text && data.customBackgroundImage) {
           generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
             sendResponse({ imageData: imageData });
           });
@@ -732,8 +964,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === "generateSVG") {
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
+    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage", "backgroundType"], (data) => {
+      if (data.quoteText && data.backgroundType === "transparent") {
+        const svgData = generateSVGQuoteTransparent(data.quoteText, request.includeWatermark, request.font, request.fontSize, request.textColor, request.alignment);
+        sendResponse({ svgData: svgData });
+      } else if (data.quoteText && data.customBackgroundImage) {
         generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
           sendResponse({ svgData: svgData });
         });
@@ -770,7 +1005,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   if (request.action === "regenerateWithSettings") {
     chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
-      if (data.customBackgroundImage) {
+      // Handle transparent background
+      if (request.backgroundType === "transparent") {
+        generateQuoteImageDataTransparent(request.text, request.includeWatermark, request.font, request.fontSize, request.textColor, request.alignment).then((imageData) => {
+          chrome.storage.local.set({ quoteImage: imageData });
+          sendResponse({ imageData: imageData });
+        });
+      } else if (data.customBackgroundImage) {
         generateQuoteImageDataWithImage(request.text, data.customBackgroundImage, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
@@ -796,7 +1037,7 @@ function createQuoteImage(text) {
   // Clear old image data first to prevent showing stale content
   chrome.storage.local.remove(['quoteImage'], () => {
     // Store the original text for later use
-    chrome.storage.local.set({ quoteText: text });
+    chrome.storage.local.set({ "quotura:quoteText": text });
 
     // Prefer custom image or persisted gradient if available
     chrome.storage.local.get(['customBackgroundImage', 'currentGradient'], (data) => {
