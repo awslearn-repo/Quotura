@@ -24,18 +24,19 @@ chrome.contextMenus.onClicked.addListener((info) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "generateWithoutWatermark") {
     // Prefer custom image background if available
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
-        generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
+    chrome.storage.local.get(["quotura:quoteText", "quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+      const text = data["quotura:quoteText"] || data.quoteText;
+      if (text && data.customBackgroundImage) {
+        generateQuoteImageDataWithImage(text, data.customBackgroundImage, false).then((imageData) => {
           sendResponse({ imageData });
         });
-      } else if (data.quoteText && data.currentGradient) {
-        generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
+      } else if (text && data.currentGradient) {
+        generateQuoteImageDataWithGradient(text, data.currentGradient, false).then((imageData) => {
           sendResponse({ imageData });
         });
-      } else if (data.quoteText) {
+      } else if (text) {
         // Fallback: if no gradient stored, use the original function
-        generateQuoteImageData(data.quoteText, false).then((imageData) => {
+        generateQuoteImageData(text, false).then((imageData) => {
           sendResponse({ imageData });
         });
       }
@@ -45,8 +46,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   if (request.action === "generateSVG") {
     // Generate SVG version of the quote, preferring custom image background
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
+    chrome.storage.local.get(["quotura:quoteText", "quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+      const text = data["quotura:quoteText"] || data.quoteText;
+      if (text && data.customBackgroundImage) {
         generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
           sendResponse({ svgData });
         });
@@ -940,8 +942,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "generateWithoutWatermark") {
     // Small delay to ensure currentGradient is properly stored
     setTimeout(() => {
-      chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-        if (data.quoteText && data.customBackgroundImage) {
+      chrome.storage.local.get(["quotura:quoteText", "quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+        const text = data["quotura:quoteText"] || data.quoteText;
+      if (text && data.customBackgroundImage) {
           generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
             sendResponse({ imageData: imageData });
           });
@@ -1034,7 +1037,7 @@ function createQuoteImage(text) {
   // Clear old image data first to prevent showing stale content
   chrome.storage.local.remove(['quoteImage'], () => {
     // Store the original text for later use
-    chrome.storage.local.set({ quoteText: text });
+    chrome.storage.local.set({ "quotura:quoteText": text });
 
     // Prefer custom image or persisted gradient if available
     chrome.storage.local.get(['customBackgroundImage', 'currentGradient'], (data) => {

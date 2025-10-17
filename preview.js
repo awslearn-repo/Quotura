@@ -51,6 +51,7 @@
     if (!panelOpen) {
       panelOpen = true;
       editorPanel.classList.add("active");
+      editorPanel.setAttribute("aria-hidden", "false");
       document.body.classList.add("panel-open");
       
       // Load current settings
@@ -65,7 +66,11 @@
     if (panelOpen) {
       panelOpen = false;
       editorPanel.classList.add("exiting");
+      editorPanel.setAttribute("aria-hidden", "true");
       document.body.classList.remove("panel-open");
+      
+      // Return focus to image
+      if (img) img.focus();
       
       setTimeout(() => {
         editorPanel.classList.remove("active", "exiting");
@@ -146,8 +151,16 @@
           img.src = data.quoteImage;                    // Set image source to data URL
           msg.textContent = "Your beautified quote is ready!";
           // Prime current text for editing
-          chrome.storage.local.get(["quoteText"], (t) => {
-            if (t && t.quoteText) currentText = t.quoteText;
+          chrome.storage.local.get(["quotura:quoteText", "quoteText"], (t) => {
+            // Migration: check both old and new keys
+            if (t && t["quotura:quoteText"]) {
+              currentText = t["quotura:quoteText"];
+            } else if (t && t.quoteText) {
+              currentText = t.quoteText;
+              // Migrate old key to new key
+              chrome.storage.local.set({ "quotura:quoteText": t.quoteText });
+              chrome.storage.local.remove("quoteText");
+            }
           });
           
           // Enable export buttons
@@ -487,7 +500,7 @@
       textArea.addEventListener('input', (e) => {
         currentText = e.target.value;
         if (isChromeAvailable()) {
-          chrome.storage.local.set({ quoteText: currentText });
+          chrome.storage.local.set({ "quotura:quoteText": currentText });
         }
         debounceRegenerateWithNewText();
       });
@@ -553,8 +566,19 @@
       if (control) {
         control.disabled = !hasSelection;
         control.setAttribute('aria-disabled', !hasSelection);
+        
+        // Update tabindex for keyboard navigation
+        if (control.hasAttribute('tabindex')) {
+          control.setAttribute('tabindex', hasSelection ? '0' : '-1');
+        }
       }
     });
+    
+    // Update helper text
+    const helper = document.getElementById('selection-helper');
+    if (helper) {
+      helper.textContent = hasSelection ? 'Text selected - formatting enabled' : 'Select text to enable formatting';
+    }
   }
 
   function updateColorSwatches(selectedColor) {
@@ -1021,8 +1045,10 @@
       msg.textContent = "Settings updated (preview only)";
       return;
     }
-    chrome.storage.local.get(["quoteText"], (data) => {
-      if (data.quoteText) {
+    chrome.storage.local.get(["quotura:quoteText", "quoteText"], (data) => {
+      // Migration: check both old and new keys
+      const text = data["quotura:quoteText"] || data.quoteText;
+      if (text) {
         msg.textContent = "Updating with new settings...";
         disableExportButtons();
         
@@ -1035,7 +1061,7 @@
         
         chrome.runtime.sendMessage({
           action: "regenerateWithSettings",
-          text: data.quoteText,
+          text: text,
           font: currentFont,
           fontSize: currentFontSize,
           includeWatermark: !watermarkRemoved,
@@ -1116,6 +1142,14 @@
         handleColorChange(swatch.dataset.color);
       }
     });
+    
+    // Keyboard support for color swatches
+    swatch.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && !swatch.disabled) {
+        e.preventDefault();
+        handleColorChange(swatch.dataset.color);
+      }
+    });
   });
   
   if (customColorPicker) {
@@ -1143,6 +1177,14 @@
   backgroundOptions.forEach(option => {
     option.addEventListener("click", () => {
       if (!option.disabled) {
+        handleBackgroundChange(option.dataset.type);
+      }
+    });
+    
+    // Keyboard support for background options
+    option.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && !option.disabled) {
+        e.preventDefault();
         handleBackgroundChange(option.dataset.type);
       }
     });
