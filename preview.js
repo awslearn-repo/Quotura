@@ -45,6 +45,32 @@
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
 
+  // Centralized Cognito configuration and URL builders
+  const COGNITO_CONFIG = {
+    domain: "https://us-east-1mguj75ffn.auth.us-east-1.amazoncognito.com",
+    clientId: "4nak1safpk5ueahr20cr2n4vta",
+    redirectUri: "chrome-extension://dlnlebhcjcjkpbggdloipihaobpmlbld/preview.html",
+    scopes: ["email", "openid"],
+  };
+
+  function buildCognitoAuthUrl(action, config) {
+    const url = new URL(`/${action}`, config.domain);
+    url.searchParams.set("client_id", config.clientId);
+    url.searchParams.set("redirect_uri", config.redirectUri);
+    url.searchParams.set("response_type", "code");
+    if (Array.isArray(config.scopes) && config.scopes.length > 0) {
+      url.searchParams.set("scope", config.scopes.join(" "));
+    }
+    return url.toString();
+  }
+
+  function buildCognitoLogoutUrl(config) {
+    const url = new URL("/logout", config.domain);
+    url.searchParams.set("client_id", config.clientId);
+    url.searchParams.set("logout_uri", config.redirectUri);
+    return url.toString();
+  }
+
   // Update background layer to reflect current gradient selection
   function updateEditBackgroundGradient() {
     if (!editBackground) return;
@@ -151,19 +177,12 @@
    * - Treats presence of ?code=... as "signed in" for now
    */
   function initializeAuth() {
-    // Provided Hosted UI login URL
-    const COGNITO_LOGIN_URL = "https://us-east-1mguj75ffn.auth.us-east-1.amazoncognito.com/login?client_id=4nak1safpk5ueahr20cr2n4vta&redirect_uri=chrome-extension://dlnlebhcjcjkpbggdloipihaobpmlbld/preview.html&response_type=code&scope=email+openid+phone";
-    const loginUrl = new URL(COGNITO_LOGIN_URL);
-    const signupUrl = new URL(COGNITO_LOGIN_URL.replace("/login", "/signup"));
-    const cognitoDomain = `${loginUrl.protocol}//${loginUrl.host}`;
-    const clientId = loginUrl.searchParams.get("client_id") || "";
-    const redirectUri = loginUrl.searchParams.get("redirect_uri") || "";
+    // Generate Hosted UI URLs from config
+    const loginUrlString = buildCognitoAuthUrl("login", COGNITO_CONFIG);
+    const signupUrlString = buildCognitoAuthUrl("signup", COGNITO_CONFIG);
 
     function getLogoutUrl() {
-      const url = new URL("/logout", cognitoDomain);
-      url.searchParams.set("client_id", clientId);
-      url.searchParams.set("logout_uri", redirectUri);
-      return url.toString();
+      return buildCognitoLogoutUrl(COGNITO_CONFIG);
     }
 
     function setSignedIn(isSignedIn, codeValue) {
@@ -209,12 +228,12 @@
     // Wire up buttons
     if (loginBtn) {
       loginBtn.addEventListener("click", () => {
-        window.location.href = loginUrl.toString();
+        window.location.href = loginUrlString;
       });
     }
     if (signupBtn) {
       signupBtn.addEventListener("click", () => {
-        window.location.href = signupUrl.toString();
+        window.location.href = signupUrlString;
       });
     }
     if (logoutBtn) {
