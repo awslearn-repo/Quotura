@@ -803,6 +803,68 @@
         line-height: 1;
         user-select: none;
       }
+
+      /* Formatting (B/I/U) Container Styling */
+      .format-container {
+        display: flex;
+        align-items: center;
+        gap: 8px; /* small space between buttons */
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        padding: 8px;
+        margin: 0;
+        transform: translateX(50px);
+        opacity: 0;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      }
+
+      .edit-panel.active .format-container {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.3s forwards;
+      }
+
+      .edit-panel.exiting .format-container {
+        transform: translateX(50px);
+        opacity: 0;
+        transition: all 0.2s ease-out;
+      }
+
+      /* Formatting Button Styling */
+      .format-btn {
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        font-size: 16px;
+        color: white;
+        background: rgba(255, 255, 255, 0.1);
+        outline: none;
+        position: relative;
+        overflow: hidden;
+        user-select: none;
+      }
+
+      .format-btn:hover {
+        transform: scale(1.08);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .format-btn.active {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.15));
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+      }
+
+      /* Individual letter styling per requirement */
+      #boldBtn { font-weight: 800; }
+      #italicBtn { font-style: italic; }
+      #underlineBtn { text-decoration: underline; text-underline-offset: 2px; }
       
       /* Shake animation for size limits */
       @keyframes shake {
@@ -1235,6 +1297,11 @@
           <button id="increaseSizeBtn" class="size-btn increase-btn">
             <span class="size-icon">+</span>
           </button>
+        </div>
+        <div id="formatContainer" class="format-container" aria-label="Text formatting">
+          <button id="boldBtn" class="format-btn" title="Bold" aria-label="Bold">B</button>
+          <button id="italicBtn" class="format-btn" title="Italic" aria-label="Italic">I</button>
+          <button id="underlineBtn" class="format-btn" title="Underline" aria-label="Underline">U</button>
         </div>
         <button id="doneBtn" class="panel-btn done-btn">
           <span class="btn-icon">✅</span>

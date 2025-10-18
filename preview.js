@@ -25,6 +25,9 @@
   const inlineDoneContainer = document.getElementById("inlineDoneContainer"); // Inline Done container
   const inlineDoneBtn = document.getElementById("inlineDoneBtn");             // Inline Done button
   const editBackground = document.getElementById("editBackground");          // Background layer during editing
+  const boldBtn = document.getElementById("boldBtn");                         // Bold formatting button
+  const italicBtn = document.getElementById("italicBtn");                     // Italic formatting button
+  const underlineBtn = document.getElementById("underlineBtn");               // Underline formatting button
   
   // State variables
   let currentImageData = null;
@@ -554,6 +557,42 @@
     sel.addRange(range);
   }
 
+  function ensureInlineEditorOpen() {
+    if (!inlineEditing) {
+      openInlineEditor();
+    }
+  }
+
+  function toggleCommand(command) {
+    try {
+      ensureInlineEditorOpen();
+      // Use deprecated execCommand for simplicity; widely supported for contentEditable
+      document.execCommand(command, false, null);
+      // Persist content and refresh image
+      const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
+      currentText = newText;
+      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
+      debounceRegenerateWithNewText();
+      updateActiveFormatButtons();
+      inlineEditor.focus();
+    } catch (_) {}
+  }
+
+  function updateActiveFormatButtons() {
+    try {
+      if (!inlineEditor) return;
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      // Query commands state
+      const isBold = document.queryCommandState && document.queryCommandState('bold');
+      const isItalic = document.queryCommandState && document.queryCommandState('italic');
+      const isUnderline = document.queryCommandState && document.queryCommandState('underline');
+      if (boldBtn) boldBtn.classList.toggle('active', !!isBold);
+      if (italicBtn) italicBtn.classList.toggle('active', !!isItalic);
+      if (underlineBtn) underlineBtn.classList.toggle('active', !!isUnderline);
+    } catch (_) {}
+  }
+
   function openInlineEditor() {
     if (isChromeAvailable()) {
       chrome.storage.local.get(["quoteText"], (data) => {
@@ -565,6 +604,8 @@
         if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
         showEditingVisuals();
         placeCaretAtEnd(inlineEditor);
+      inlineEditor.focus();
+      setTimeout(updateActiveFormatButtons, 0);
       });
     } else {
       currentText = currentText || "";
@@ -575,6 +616,8 @@
       if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
       showEditingVisuals();
       placeCaretAtEnd(inlineEditor);
+    inlineEditor.focus();
+    setTimeout(updateActiveFormatButtons, 0);
     }
   }
 
@@ -969,6 +1012,7 @@
     currentText = newText;
     if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
     debounceRegenerateWithNewText();
+    updateActiveFormatButtons();
   });
 
   // Close inline editor with Escape
@@ -978,6 +1022,21 @@
       closeInlineEditor();
     }
   });
+
+  // Update format button states on selection changes within the editor
+  document.addEventListener('selectionchange', () => {
+    if (!inlineEditing) return;
+    if (!inlineEditor) return;
+    const sel = window.getSelection();
+    if (sel && sel.anchorNode && inlineEditor.contains(sel.anchorNode)) {
+      updateActiveFormatButtons();
+    }
+  });
+
+  // Wire up formatting button events
+  if (boldBtn) boldBtn.addEventListener('click', () => toggleCommand('bold'));
+  if (italicBtn) italicBtn.addEventListener('click', () => toggleCommand('italic'));
+  if (underlineBtn) underlineBtn.addEventListener('click', () => toggleCommand('underline'));
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
