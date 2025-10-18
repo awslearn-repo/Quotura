@@ -1243,6 +1243,35 @@
         font-size: 12px;
         color: #666;
       }
+
+      /* Auth bar styling (Cognito login/signup/signout) */
+      .auth-container {
+        margin: 16px 0 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 16px;
+        padding: 16px 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        max-width: 700px;
+      }
+
+      .auth-status {
+        color: #ffffff;
+        font-weight: 600;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .auth-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
     </style>
   </head>
   <body>
@@ -1268,6 +1297,16 @@
     <!-- Status message - updated by JavaScript based on image availability -->
     <div id="message">
       Your beautified quote is ready!
+    </div>
+
+    <!-- Auth bar: Login / Sign up / Sign out using Cognito Hosted UI -->
+    <div id="authContainer" class="auth-container">
+      <div id="authStatus" class="auth-status">You are not signed in.</div>
+      <div class="auth-actions">
+        <button id="loginBtn" class="export-btn btn-secondary">🔐 Login</button>
+        <button id="signupBtn" class="export-btn btn-primary">📝 Sign up</button>
+        <button id="logoutBtn" class="export-btn btn-warning" style="display:none;">🚪 Sign out</button>
+      </div>
     </div>
     
     <!-- Quick Edit Container (button removed) -->

@@ -28,6 +28,11 @@
   const boldBtn = document.getElementById("boldBtn");                         // Bold formatting button
   const italicBtn = document.getElementById("italicBtn");                     // Italic formatting button
   const underlineBtn = document.getElementById("underlineBtn");               // Underline formatting button
+  // Auth UI elements
+  const loginBtn = document.getElementById("loginBtn");
+  const signupBtn = document.getElementById("signupBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const authStatus = document.getElementById("authStatus");
   
   // State variables
   let currentImageData = null;
@@ -127,6 +132,7 @@
   
   // Initialize the preview page
   try {
+    initializeAuth();
     initializePreview();
   } catch (e) {
     console.warn('initializePreview failed', e);
@@ -137,6 +143,105 @@
     downloadSvgBtn.disabled = true;
     copyImageBtn.disabled = true;
     removeWatermarkBtn.disabled = true;
+  }
+  
+  /**
+   * Initialize Cognito Hosted UI auth flow (login/signup/logout)
+   * - Uses provided Hosted UI URL
+   * - Treats presence of ?code=... as "signed in" for now
+   */
+  function initializeAuth() {
+    // Provided Hosted UI login URL
+    const COGNITO_LOGIN_URL = "https://us-east-1mguj75ffn.auth.us-east-1.amazoncognito.com/login?client_id=4nak1safpk5ueahr20cr2n4vta&redirect_uri=chrome-extension://dlnlebhcjcjkpbggdloipihaobpmlbld/preview.html&response_type=code&scope=email+openid+phone";
+    const loginUrl = new URL(COGNITO_LOGIN_URL);
+    const signupUrl = new URL(COGNITO_LOGIN_URL.replace("/login", "/signup"));
+    const cognitoDomain = `${loginUrl.protocol}//${loginUrl.host}`;
+    const clientId = loginUrl.searchParams.get("client_id") || "";
+    const redirectUri = loginUrl.searchParams.get("redirect_uri") || "";
+
+    function getLogoutUrl() {
+      const url = new URL("/logout", cognitoDomain);
+      url.searchParams.set("client_id", clientId);
+      url.searchParams.set("logout_uri", redirectUri);
+      return url.toString();
+    }
+
+    function setSignedIn(isSignedIn, codeValue) {
+      const payload = { cognitoSignedIn: !!isSignedIn };
+      if (codeValue) payload.cognitoAuthCode = codeValue;
+      try {
+        if (isChromeAvailable()) {
+          chrome.storage.local.set(payload);
+        } else {
+          Object.keys(payload).forEach((k) => localStorage.setItem(k, String(payload[k])));
+        }
+      } catch (_) {}
+    }
+
+    function getSignedIn(callback) {
+      try {
+        if (isChromeAvailable()) {
+          chrome.storage.local.get(["cognitoSignedIn"], (data) => callback(!!(data && data.cognitoSignedIn)));
+        } else {
+          const v = localStorage.getItem("cognitoSignedIn");
+          callback(v === "true");
+        }
+      } catch (_) {
+        callback(false);
+      }
+    }
+
+    function updateAuthUI(signedIn) {
+      if (!authStatus || !loginBtn || !signupBtn || !logoutBtn) return;
+      if (signedIn) {
+        authStatus.textContent = "You are signed in.";
+        loginBtn.style.display = "none";
+        signupBtn.style.display = "none";
+        logoutBtn.style.display = "inline-block";
+      } else {
+        authStatus.textContent = "You are not signed in.";
+        loginBtn.style.display = "inline-block";
+        signupBtn.style.display = "inline-block";
+        logoutBtn.style.display = "none";
+      }
+    }
+
+    // Wire up buttons
+    if (loginBtn) {
+      loginBtn.addEventListener("click", () => {
+        window.location.href = loginUrl.toString();
+      });
+    }
+    if (signupBtn) {
+      signupBtn.addEventListener("click", () => {
+        window.location.href = signupUrl.toString();
+      });
+    }
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", () => {
+        setSignedIn(false);
+        updateAuthUI(false);
+        // Redirect through Cognito logout to clear session
+        window.location.href = getLogoutUrl();
+      });
+    }
+
+    // Determine current state from URL (?code=...)
+    const urlParams = new URLSearchParams(window.location.search);
+    const authCode = urlParams.get("code");
+    if (authCode) {
+      setSignedIn(true, authCode);
+      updateAuthUI(true);
+      // Clean the URL to remove the code param for aesthetics
+      try {
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch (_) {}
+      return;
+    }
+
+    // Otherwise, restore last-known state
+    getSignedIn(updateAuthUI);
   }
   
   /**
