@@ -711,7 +711,7 @@ function addWatermark(ctx, width, height, gradient) {
  * @returns {Promise} Promise that resolves with image data
  */
 function generateQuoteImageDataWithSettings(text, selectedGradient, includeWatermark = true, font = "Arial", fontSize = 28) {
-  return new Promise(async (resolve) => {
+  return new Promise((resolve) => {
     // Create offscreen canvas for image generation (800x400 pixels)
     const canvas = new OffscreenCanvas(800, 400);
     const ctx = canvas.getContext("2d");
