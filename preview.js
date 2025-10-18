@@ -460,7 +460,7 @@
       // Enter edit mode - show panel
       editMode = true;
       editPanel.classList.add("active");
-      quickEditBtn.style.opacity = "0.7";
+      if (quickEditBtn) quickEditBtn.style.opacity = "0.7";
     }
   }
 
@@ -933,7 +933,7 @@
       setTimeout(() => {
         editPanel.classList.remove("exiting");
         editMode = false;
-        quickEditBtn.style.opacity = "1";
+        if (quickEditBtn) quickEditBtn.style.opacity = "1";
       }, 400);
     }
     // Also close inline editor if open
@@ -949,7 +949,7 @@
   removeWatermarkBtn.addEventListener("click", handleRemoveWatermarkClick);
   
   // Event listener for quick edit
-  quickEditBtn.addEventListener("click", handleQuickEdit);
+  if (quickEditBtn) quickEditBtn.addEventListener("click", handleQuickEdit);
   
   // Event listeners for edit panel
   fontBtn.addEventListener("click", handleFontChange);
@@ -960,8 +960,8 @@
   editTextBtn.addEventListener("click", handleEditText);
   if (inlineDoneBtn) inlineDoneBtn.addEventListener('click', handleDone);
   
-  // Open inline editor when image is clicked
-  img.addEventListener("click", openInlineEditor);
+  // Open quick edit panel when image is clicked
+  img.addEventListener("click", handleQuickEdit);
   
   // Inline editor live update
   inlineEditor.addEventListener('input', () => {
