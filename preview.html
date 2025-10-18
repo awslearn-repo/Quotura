@@ -7,17 +7,16 @@
 
 
     <style>
-      /* Main layout - two-column flex container with beautiful background */
+      /* Main layout - vertical flex container with beautiful background */
       body {
         display: flex;
-        flex-direction: row;
-        align-items: flex-start;       /* Align to top */
-        justify-content: center;       /* Center horizontally */
+        flex-direction: column;
+        align-items: center;           /* Center horizontally */
+        justify-content: flex-start;   /* Start from top */
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         padding: 20px;
         margin: 0;
         min-height: 100vh;
-        gap: 16px;
         
         /* Beautiful gradient background with subtle animation - purple/blue focus */
         background: linear-gradient(-45deg, #667eea, #764ba2, #4facfe, #00f2fe, #6a5acd, #483d8b, #a1c4fd, #c2e9fb);
@@ -266,11 +265,10 @@
       
       /* Generated quote image styling with enhanced presentation */
       #image {
-        max-width: 100%;               /* Full width in left column */
+        max-width: 85%;                /* Responsive width with margins */
         max-height: 70vh;              /* Limit height to viewport */
         border-radius: 20px;           /* Rounded corners for modern look */
         display: block;
-        flex-shrink: 1;                /* Allow shrinking on small viewports */
         
         /* Enhanced shadow and glow effect */
         box-shadow: 
@@ -294,14 +292,13 @@
           0 0 80px rgba(255, 255, 255, 0.2);
       }
       
-      /* Image container - left column */
+      /* Image container */
       #imageContainer {
         position: relative;
         display: flex;
-        flex: 1;
+        width: 100%;
         justify-content: center;
-        align-items: flex-start;
-        min-width: 0; /* Allow shrinking */
+        align-items: center;
       }
       
       /* Remove inline overlay styles (replaced by side panel) */
@@ -411,13 +408,112 @@
         cursor: wait;
       }
       
-      /* Right-side Editor Panel */
-      .editor-panel {
+      /* Quick Edit Button Styling */
+      .quick-edit-container {
+        margin: 20px 0;
+        text-align: center;
+        position: relative;
+        z-index: 9999;
+      }
+      
+      .quick-edit-btn {
+        position: relative;
+        padding: 15px 30px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        border-radius: 50px;
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        outline: none;
+        overflow: hidden;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 160px;
+        justify-content: center;
+      }
+      
+      .edit-icon {
+        font-size: 18px;
+        transition: transform 0.3s ease;
+      }
+      
+      .edit-text {
+        transition: all 0.3s ease;
+        position: relative;
+        z-index: 2;
+      }
+      
+      .edit-glow {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), transparent 60%);
+        border-radius: 50px;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        z-index: 1;
+        pointer-events: none;
+      }
+      
+      .quick-edit-btn:hover {
+        transform: translateY(-3px) scale(1.05);
+        box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+      }
+      
+      .quick-edit-btn:hover .edit-glow {
+        opacity: 1;
+      }
+      
+      .quick-edit-btn:hover .edit-icon {
+        transform: rotate(15deg) scale(1.1);
+      }
+      
+      .quick-edit-btn:hover .edit-text {
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      
+      .quick-edit-btn:active {
+        transform: translateY(-1px) scale(1.02);
+        transition: all 0.1s ease;
+      }
+      
+      /* Pulse animation for attention */
+      @keyframes editPulse {
+        0%, 100% {
+          box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        50% {
+          box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+      }
+      
+      .quick-edit-btn {
+        animation: editPulse 3s ease-in-out infinite;
+      }
+      
+      .quick-edit-btn:hover {
+        animation: none;
+      }
+      
+      /* Edit Panel Styling - right sidebar */
+      .edit-panel {
         position: fixed;
         top: 0;
-        right: -420px; /* Hidden initially (off-canvas) */
+        right: -380px; /* Hidden initially (off-canvas) */
         bottom: 0;
-        width: 400px;
+        transform: none;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        width: 360px;
+        padding: 20px;
         background: rgba(255, 255, 255, 0.15);
         backdrop-filter: blur(18px);
         border-radius: 16px 0 0 16px;
@@ -426,395 +522,267 @@
         transition: right 0.45s cubic-bezier(0.68, -0.55, 0.265, 1.55), opacity 0.2s ease;
         z-index: 1000;
         overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        padding: 20px;
-        gap: 16px;
       }
       
-      .editor-panel.active {
+      .edit-panel.active {
         right: 0; /* Slides in from right */
       }
       
-      .editor-panel.exiting {
-        right: -420px;
-        transition: right 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53);
-      }
-      
-      /* Panel Header */
-      .panel-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-        padding-bottom: 15px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-      }
-      
-      .panel-title {
-        font-size: 18px;
-        font-weight: 600;
-        color: white;
-        margin: 0;
-      }
-      
-      .close-panel-btn {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 20px;
-        cursor: pointer;
-        padding: 5px;
-        border-radius: 50%;
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-      }
-      
-      .close-panel-btn:hover {
-        background: rgba(255, 255, 255, 0.2);
-        transform: scale(1.1);
-      }
-      
-      /* Control Groups */
-      .control-group {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 12px;
-      }
-      
-      .control-group-title {
-        font-size: 14px;
-        font-weight: 600;
-        color: white;
-        margin: 0 0 12px 0;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-      
-      /* Control Buttons */
-      .control-btn {
+      /* Panel Button Styling */
+      .panel-btn {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 10px 14px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
         color: white;
-        font-size: 13px;
-        font-weight: 500;
+        font-size: 14px;
+        font-weight: 600;
         cursor: pointer;
         outline: none;
-        transition: all 0.2s ease;
-        width: 100%;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transform: translateX(50px);
+        opacity: 0;
+        min-width: 80px;
         justify-content: flex-start;
-        margin-bottom: 8px;
       }
       
-      .control-btn:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.2);
-        border-color: rgba(255, 255, 255, 0.3);
-        transform: translateY(-1px);
+      /* Staggered animation for buttons */
+      .edit-panel.active button.panel-btn:nth-of-type(1) {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.1s forwards;
       }
       
-      .control-btn:active:not(:disabled) {
-        transform: translateY(0);
+      .edit-panel.active button.panel-btn:nth-of-type(2) {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.2s forwards;
       }
       
-      .control-btn:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-        transform: none !important;
+      .edit-panel.active button.panel-btn:nth-of-type(3) {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.3s forwards;
       }
       
-      .control-btn.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-color: rgba(102, 126, 234, 0.5);
+      .edit-panel.active button.panel-btn:nth-of-type(4) {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.4s forwards;
       }
+      
+      @keyframes slideInPanel {
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      
+      /* Panel button hover effects */
+      .panel-btn:hover {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
+        transform: scale(1.05);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      }
+      
+      .panel-btn:active {
+        transform: scale(0.98);
+      }
+      
+      /* Done button special styling */
+      .done-btn {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%) !important;
+        border-color: rgba(67, 233, 123, 0.5);
+      }
+      
+      .done-btn:hover {
+        background: linear-gradient(135deg, #38f9d7 0%, #43e97b 100%) !important;
+        box-shadow: 0 5px 15px rgba(67, 233, 123, 0.4);
+      }
+      
+      
       
       /* Button icons */
       .btn-icon {
-        font-size: 14px;
+        font-size: 16px;
         display: flex;
         align-items: center;
       }
       
       .btn-text {
-        font-weight: 500;
+        font-weight: 600;
       }
-      
-      /* Font Controls */
-      .font-controls {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      
-      .font-dropdown {
+
+      /* Quote text input inside panel */
+      .quote-input {
         width: 100%;
-        padding: 8px 12px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
-        color: white;
-        font-size: 13px;
+        min-height: 120px;
+        resize: vertical;
+        padding: 12px 14px;
+        color: #ffffff;
+        font-size: 16px;
+        line-height: 1.5;
+        font-weight: 600;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
         outline: none;
-        cursor: pointer;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      }
+
+      .quote-input::placeholder {
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .quote-input:focus {
+        border-color: rgba(102, 126, 234, 0.6);
+        box-shadow: 0 4px 18px rgba(102, 126, 234, 0.25);
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 100%);
       }
       
-      .font-dropdown:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
+      /* Exit animation */
+      .edit-panel.exiting {
+        right: -200px;
+        transition: right 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53);
       }
       
-      .font-dropdown option {
-        background: #333;
-        color: white;
+      .edit-panel.exiting .panel-btn {
+        transform: translateX(50px);
+        opacity: 0;
+        transition: all 0.2s ease-out;
+      }
+
+      /* When sidebar is open, reserve space so the image stays visible on the left */
+      body.sidebar-open {
+        padding-right: 380px;
+        transition: padding-right 0.45s cubic-bezier(0.68, -0.55, 0.265, 1.55);
       }
       
-      /* Size Controls */
-      .size-controls {
+      /* Size Container Styling */
+      .size-container {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 0;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        padding: 8px;
+        margin: 0;
+        transform: translateX(50px);
+        opacity: 0;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
       }
       
-      .size-input {
-        flex: 1;
-        padding: 8px 12px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
-        color: white;
-        font-size: 13px;
-        outline: none;
-        text-align: center;
+      .edit-panel.active .size-container {
+        animation: slideInPanel 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.2s forwards;
       }
       
-      .size-input:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
+      .edit-panel.exiting .size-container {
+        transform: translateX(50px);
+        opacity: 0;
+        transition: all 0.2s ease-out;
       }
       
+      /* Size Button Styling */
       .size-btn {
         width: 32px;
         height: 32px;
         border: none;
-        border-radius: 6px;
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         font-weight: bold;
-        font-size: 16px;
+        font-size: 18px;
         color: white;
         background: rgba(255, 255, 255, 0.1);
         outline: none;
-      }
-      
-      .size-btn:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.2);
-        transform: scale(1.05);
-      }
-      
-      .size-btn:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-        transform: none !important;
-      }
-      
-      /* Color Controls */
-      .color-controls {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      
-      .color-swatch {
-        width: 32px;
-        height: 32px;
-        border-radius: 6px;
-        border: 2px solid transparent;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        position: relative;
-      }
-      
-      .color-swatch:hover {
-        transform: scale(1.1);
-        border-color: rgba(255, 255, 255, 0.5);
-      }
-      
-      .color-swatch.active {
-        border-color: white;
-        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
-      }
-      
-      .color-picker {
-        width: 100%;
-        height: 32px;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        background: transparent;
-      }
-      
-      .color-picker:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-      
-      /* Alignment Controls */
-      .alignment-controls {
-        display: flex;
-        gap: 4px;
-      }
-      
-      .alignment-btn {
-        flex: 1;
-        padding: 8px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 6px;
-        color: white;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        font-size: 14px;
-        text-align: center;
-      }
-      
-      .alignment-btn:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.2);
-      }
-      
-      .alignment-btn.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-color: rgba(102, 126, 234, 0.5);
-      }
-      
-      .alignment-btn:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-      
-      /* Background Controls */
-      .background-controls {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      
-      .background-option {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
-        color: white;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        font-size: 13px;
-      }
-      
-      .background-option:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.2);
-      }
-      
-      .background-option.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-color: rgba(102, 126, 234, 0.5);
-      }
-      
-      .background-option:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-      
-      .background-swatch {
-        width: 20px;
-        height: 20px;
-        border-radius: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-      }
-      
-      /* Upload Image */
-      .upload-control {
         position: relative;
         overflow: hidden;
       }
       
-      .upload-input {
+      .size-btn::before {
+        content: '';
         position: absolute;
-        left: -9999px;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
         opacity: 0;
+        transition: opacity 0.2s ease;
+        border-radius: 8px;
       }
       
-      /* Selection Helper */
-      .selection-helper {
+      .size-btn:hover::before {
+        opacity: 1;
+      }
+      
+      .size-btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+      
+      .size-btn:active {
+        transform: scale(0.95);
+        transition: transform 0.1s ease;
+      }
+      
+      /* Decrease Button */
+      .decrease-btn:hover {
+        background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+        color: white;
+      }
+      
+      /* Increase Button */
+      .increase-btn:hover {
+        background: linear-gradient(135deg, #51cf66, #40c057);
+        color: white;
+      }
+      
+      /* Size Display */
+      .size-display {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+        padding: 0 12px;
+        min-width: 50px;
+        justify-content: center;
+        position: relative;
+      }
+      
+      .size-value {
+        font-size: 16px;
+        font-weight: bold;
+        color: white;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      
+      .size-unit {
         font-size: 12px;
-        color: rgba(255, 255, 255, 0.7);
-        font-style: italic;
-        margin-top: 8px;
-        text-align: center;
-      }
-
-      /* When sidebar is open, adjust layout */
-      body.panel-open {
-        padding-right: 420px;
-        transition: padding-right 0.45s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 500;
       }
       
-      /* Transparent background checkerboard pattern */
-      .transparent-pattern {
-        background-image: 
-          linear-gradient(45deg, #ccc 25%, transparent 25%), 
-          linear-gradient(-45deg, #ccc 25%, transparent 25%), 
-          linear-gradient(45deg, transparent 75%, #ccc 75%), 
-          linear-gradient(-45deg, transparent 75%, #ccc 75%);
-        background-size: 20px 20px;
-        background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      /* Size value animation */
+      .size-value.updating {
+        transform: scale(1.2);
+        color: #51cf66;
       }
       
-      /* Responsive adjustments */
-      @media (max-width: 768px) {
-        body {
-          flex-direction: column;
-          gap: 12px;
-        }
-        
-        .editor-panel {
-          position: fixed;
-          top: 0;
-          right: -100%;
-          width: 100%;
-          height: 100%;
-          border-radius: 0;
-        }
-        
-        .editor-panel.active {
-          right: 0;
-        }
-        
-        body.panel-open {
-          padding-right: 0;
-        }
-        
-        #imageContainer {
-          flex: none;
-        }
-        
-        #image {
-          max-width: 100%;
-        }
+      /* Size icon styling */
+      .size-icon {
+        font-size: 16px;
+        line-height: 1;
+        user-select: none;
+      }
+      
+      /* Shake animation for size limits */
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-3px); }
+        75% { transform: translateX(3px); }
       }
       
       /* Font Picker Modal Styling */
@@ -1211,120 +1179,54 @@
     
     <!-- Status message - updated by JavaScript based on image availability -->
     <div id="message">
-      Your beautified quote is ready! Click the preview image to open the editor panel.
+      Your beautified quote is ready!
+    </div>
+    
+        <!-- Quick Edit Button -->
+    <div class="quick-edit-container">
+      <button id="quickEditBtn" class="quick-edit-btn">
+        <span class="edit-icon">✏️</span>
+        <span class="edit-text">Quick Edit</span>
+        <div class="edit-glow"></div>
+      </button>
+      
+      <!-- Edit Panel - appears on right side -->
+      <div id="editPanel" class="edit-panel">
+        <button id="fontBtn" class="panel-btn">
+          <span class="btn-icon">🔤</span>
+          <span class="btn-text">Font</span>
+        </button>
+        <button id="backgroundBtn" class="panel-btn">
+          <span class="btn-icon">🎨</span>
+          <span class="btn-text">Background</span>
+        </button>
+        <button id="editTextBtn" class="panel-btn">
+          <span class="btn-icon">📝</span>
+          <span class="btn-text">Edit Text</span>
+        </button>
+        <textarea id="quoteInput" class="quote-input" rows="6" placeholder="Edit your quote..." aria-label="Edit quote text"></textarea>
+        <div id="fontSizeContainer" class="size-container">
+          <button id="decreaseSizeBtn" class="size-btn decrease-btn">
+            <span class="size-icon">−</span>
+          </button>
+          <div class="size-display">
+            <span id="currentSize" class="size-value">28</span>
+            <span class="size-unit">px</span>
+          </div>
+          <button id="increaseSizeBtn" class="size-btn increase-btn">
+            <span class="size-icon">+</span>
+          </button>
+        </div>
+        <button id="doneBtn" class="panel-btn done-btn">
+          <span class="btn-icon">✅</span>
+          <span class="btn-text">Done</span>
+        </button>
+      </div>
     </div>
     
     <!-- Container for the generated quote image -->
     <div id="imageContainer">
       <img id="image" src="" alt="Beautified Quote" />
-    </div>
-    
-    <!-- Right-side Editor Panel -->
-    <div id="editorPanel" class="editor-panel" role="dialog" aria-labelledby="panel-title" aria-hidden="true">
-      <div class="panel-header">
-        <h3 id="panel-title" class="panel-title">Editor</h3>
-        <button id="closePanelBtn" class="close-panel-btn" aria-label="Close editor panel">✕</button>
-      </div>
-      
-      <!-- Font Controls -->
-      <div class="control-group">
-        <h4 class="control-group-title">Font</h4>
-        <div class="font-controls">
-          <select id="fontSelect" class="font-dropdown" disabled aria-label="Select font family" aria-describedby="font-help">
-            <option value="Arial">Arial</option>
-            <option value="Georgia">Georgia</option>
-            <option value="Helvetica">Helvetica</option>
-            <option value="Times New Roman">Times New Roman</option>
-            <option value="Verdana">Verdana</option>
-          </select>
-        </div>
-      </div>
-      
-      <!-- Font Size Controls -->
-      <div class="control-group">
-        <h4 class="control-group-title">Font Size</h4>
-        <div class="size-controls">
-          <button id="decreaseSizeBtn" class="size-btn" disabled aria-label="Decrease font size">−</button>
-          <input id="fontSizeInput" type="number" class="size-input" value="28" min="12" max="60" disabled aria-label="Font size in pixels">
-          <button id="increaseSizeBtn" class="size-btn" disabled aria-label="Increase font size">+</button>
-        </div>
-      </div>
-      
-      <!-- Text Formatting Controls -->
-      <div class="control-group">
-        <h4 class="control-group-title">Formatting</h4>
-        <div class="font-controls">
-          <button id="boldBtn" class="control-btn" disabled aria-label="Make text bold" aria-pressed="false">
-            <span class="btn-icon">B</span>
-            <span class="btn-text">Bold</span>
-          </button>
-          <button id="italicBtn" class="control-btn" disabled aria-label="Make text italic" aria-pressed="false">
-            <span class="btn-icon">I</span>
-            <span class="btn-text">Italic</span>
-          </button>
-          <button id="underlineBtn" class="control-btn" disabled aria-label="Underline text" aria-pressed="false">
-            <span class="btn-icon">U</span>
-            <span class="btn-text">Underline</span>
-          </button>
-        </div>
-      </div>
-      
-      <!-- Text Color Controls -->
-      <div class="control-group">
-        <h4 class="control-group-title">Text Color</h4>
-        <div class="color-controls" role="group" aria-label="Text color options">
-          <div class="color-swatch" data-color="#ffffff" style="background: #ffffff;" role="button" tabindex="0" aria-label="White text color"></div>
-          <div class="color-swatch" data-color="#000000" style="background: #000000;" role="button" tabindex="0" aria-label="Black text color"></div>
-          <div class="color-swatch" data-color="#ff6b6b" style="background: #ff6b6b;" role="button" tabindex="0" aria-label="Red text color"></div>
-          <div class="color-swatch" data-color="#4ecdc4" style="background: #4ecdc4;" role="button" tabindex="0" aria-label="Teal text color"></div>
-          <div class="color-swatch" data-color="#45b7d1" style="background: #45b7d1;" role="button" tabindex="0" aria-label="Blue text color"></div>
-          <div class="color-swatch" data-color="#96ceb4" style="background: #96ceb4;" role="button" tabindex="0" aria-label="Green text color"></div>
-          <div class="color-swatch" data-color="#feca57" style="background: #feca57;" role="button" tabindex="0" aria-label="Yellow text color"></div>
-          <div class="color-swatch" data-color="#ff9ff3" style="background: #ff9ff3;" role="button" tabindex="0" aria-label="Pink text color"></div>
-          <input type="color" id="customColorPicker" class="color-picker" disabled aria-label="Custom text color picker">
-        </div>
-      </div>
-      
-      <!-- Text Alignment Controls -->
-      <div class="control-group">
-        <h4 class="control-group-title">Alignment</h4>
-        <div class="alignment-controls" role="group" aria-label="Text alignment options">
-          <button id="alignLeftBtn" class="alignment-btn" disabled aria-label="Align text left" aria-pressed="false">⬅</button>
-          <button id="alignCenterBtn" class="alignment-btn active" disabled aria-label="Align text center" aria-pressed="true">⬆</button>
-          <button id="alignRightBtn" class="alignment-btn" disabled aria-label="Align text right" aria-pressed="false">➡</button>
-        </div>
-      </div>
-      
-      <!-- Background Controls -->
-      <div class="control-group">
-        <h4 class="control-group-title">Background</h4>
-        <div class="background-controls" role="group" aria-label="Background options">
-          <div class="background-option" data-type="random" role="button" tabindex="0" aria-label="Random background">
-            <div class="background-swatch" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></div>
-            <span>Random</span>
-          </div>
-          <div class="background-option" data-type="transparent" role="button" tabindex="0" aria-label="Transparent background">
-            <div class="background-swatch transparent-pattern"></div>
-            <span>Transparent</span>
-          </div>
-          <div class="background-option" data-type="preset" role="button" tabindex="0" aria-label="Preset gradient backgrounds">
-            <div class="background-swatch" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"></div>
-            <span>Preset Gradients</span>
-          </div>
-          <div class="upload-control">
-            <input type="file" id="backgroundUpload" class="upload-input" accept="image/*" aria-label="Upload background image">
-            <div class="background-option" data-type="upload" role="button" tabindex="0" aria-label="Upload custom background image">
-              <div class="background-swatch" style="background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.15)); color: #333; display: flex; align-items: center; justify-content: center; font-size: 12px;">📁</div>
-              <span>Upload Image</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Selection Helper -->
-      <div id="selection-helper" class="selection-helper" role="status" aria-live="polite">
-        Select text to enable formatting
-      </div>
     </div>
     
     <!-- Export buttons for various download options -->

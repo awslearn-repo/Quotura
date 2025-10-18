@@ -12,91 +12,103 @@
   const downloadSvgBtn = document.getElementById("downloadSvgBtn"); // SVG download button
   const copyImageBtn = document.getElementById("copyImageBtn");     // Copy to clipboard button
   const removeWatermarkBtn = document.getElementById("removeWatermarkBtn"); // Remove watermark button
-  
-  // Editor panel elements
-  const editorPanel = document.getElementById("editorPanel");       // Editor panel container
-  const closePanelBtn = document.getElementById("closePanelBtn");   // Close panel button
-  const fontSelect = document.getElementById("fontSelect");         // Font dropdown
-  const fontSizeInput = document.getElementById("fontSizeInput");   // Font size input
-  const decreaseSizeBtn = document.getElementById("decreaseSizeBtn"); // Decrease size button
-  const increaseSizeBtn = document.getElementById("increaseSizeBtn"); // Increase size button
-  const boldBtn = document.getElementById("boldBtn");               // Bold button
-  const italicBtn = document.getElementById("italicBtn");           // Italic button
-  const underlineBtn = document.getElementById("underlineBtn");     // Underline button
-  const colorSwatches = document.querySelectorAll(".color-swatch"); // Color swatches
-  const customColorPicker = document.getElementById("customColorPicker"); // Custom color picker
-  const alignLeftBtn = document.getElementById("alignLeftBtn");     // Align left button
-  const alignCenterBtn = document.getElementById("alignCenterBtn"); // Align center button
-  const alignRightBtn = document.getElementById("alignRightBtn");   // Align right button
-  const backgroundOptions = document.querySelectorAll(".background-option"); // Background options
-  const backgroundUpload = document.getElementById("backgroundUpload"); // Background upload input
+  const quickEditBtn = document.getElementById("quickEditBtn");             // Quick edit button
+  const editPanel = document.getElementById("editPanel");                   // Edit panel container
+  const fontBtn = document.getElementById("fontBtn");                       // Font selection button
+  const decreaseSizeBtn = document.getElementById("decreaseSizeBtn");       // Decrease size button
+  const increaseSizeBtn = document.getElementById("increaseSizeBtn");       // Increase size button
+  const currentSizeDisplay = document.getElementById("currentSize");        // Current size display
+  const doneBtn = document.getElementById("doneBtn");                       // Done button
+  const backgroundBtn = document.getElementById("backgroundBtn");           // Background selection button
+  const editTextBtn = document.getElementById("editTextBtn");               // Edit text button
+  const inlineEditor = document.getElementById("inlineEditor");             // Inline editor overlay
+  const inlineDoneContainer = document.getElementById("inlineDoneContainer"); // Inline Done container
+  const inlineDoneBtn = document.getElementById("inlineDoneBtn");             // Inline Done button
+  const editBackground = document.getElementById("editBackground");          // Background layer during editing
+  const quoteInput = document.getElementById("quoteInput");                 // Textarea inside side panel
   
   // State variables
   let currentImageData = null;
   let watermarkRemoved = false;
-  let panelOpen = false;
+  let editMode = false;
   let currentFont = "Arial";
   let currentFontSize = 28;
   let currentGradientChoice = null; // null means random
   let currentText = null;           // Current editable text content
   let regenerateDebounceId = null;  // Debounce timer id for live updates
-  let textSelection = null;         // Current text selection for formatting
-  let currentTextColor = "#ffffff"; // Current text color
-  let currentAlignment = "center";  // Current text alignment
-  let currentBackgroundType = "random"; // Current background type
-  let attributedText = null;        // Text with formatting attributes
+  let inlineEditing = false;        // Whether inline editor is visible
 
-  // Panel management functions
-  function openEditorPanel() {
-    if (!panelOpen) {
-      panelOpen = true;
-      editorPanel.classList.add("active");
-      editorPanel.setAttribute("aria-hidden", "false");
-      document.body.classList.add("panel-open");
-      
-      // Load current settings
-      loadCurrentSettings();
-      
-      // Focus the first control
-      if (fontSelect) fontSelect.focus();
+  // Update background layer to reflect current gradient selection
+  function updateEditBackgroundGradient() {
+    if (!editBackground) return;
+    const applyGradient = (colors) => {
+      try {
+        if (Array.isArray(colors) && colors.length >= 2) {
+          editBackground.style.background = `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 100%)`;
+        } else {
+          editBackground.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        }
+      } catch (_) {
+        editBackground.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+      }
+    };
+    const applyImage = (url) => {
+      try {
+        if (url) {
+          editBackground.style.background = `url(${url}) center/cover no-repeat`;
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    };
+    if (currentGradientChoice) {
+      applyGradient(currentGradientChoice);
+      return;
+    }
+    if (isChromeAvailable()) {
+      chrome.storage.local.get(["customBackgroundImage", "currentGradient"], (data) => {
+        if (data && data.customBackgroundImage) {
+          if (!applyImage(data.customBackgroundImage)) {
+            applyGradient((data && data.currentGradient) || null);
+          }
+        } else {
+          applyGradient((data && data.currentGradient) || null);
+        }
+      });
+    } else {
+      applyGradient(null);
     }
   }
 
-  function closeEditorPanel() {
-    if (panelOpen) {
-      panelOpen = false;
-      editorPanel.classList.add("exiting");
-      editorPanel.setAttribute("aria-hidden", "true");
-      document.body.classList.remove("panel-open");
-      
-      // Return focus to image
-      if (img) img.focus();
-      
-      setTimeout(() => {
-        editorPanel.classList.remove("active", "exiting");
-      }, 400);
-    }
+  // Ensure edit overlays match the rendered image size exactly
+  function syncEditOverlayToImage() {
+    try {
+      if (!img || !editBackground || !inlineEditor) return;
+      const imageWidth = img.clientWidth;
+      const imageHeight = img.clientHeight;
+      if (!imageWidth || !imageHeight) return;
+      // Match background size to image
+      editBackground.style.width = `${imageWidth}px`;
+      editBackground.style.height = `${imageHeight}px`;
+      // Keep editor width aligned with image for consistent typing area
+      inlineEditor.style.width = `${imageWidth}px`;
+      inlineEditor.style.maxWidth = `${imageWidth}px`;
+    } catch (_) {}
   }
 
-  function loadCurrentSettings() {
-    // Load font
-    if (fontSelect) {
-      fontSelect.value = currentFont;
-    }
-    
-    // Load font size
-    if (fontSizeInput) {
-      fontSizeInput.value = currentFontSize;
-    }
-    
-    // Load text color
-    updateColorSwatches(currentTextColor);
-    
-    // Load alignment
-    updateAlignmentButtons(currentAlignment);
-    
-    // Load background type
-    updateBackgroundOptions(currentBackgroundType);
+  // Keep overlays in sync with image dimensions on load and resize
+  if (img) {
+    img.addEventListener('load', syncEditOverlayToImage, { once: false });
+  }
+  window.addEventListener('resize', syncEditOverlayToImage, { passive: true });
+
+  function showEditingVisuals() {
+    // Reserve space for the right sidebar while keeping preview visible
+    document.body.classList.add('sidebar-open');
+  }
+
+  function hideEditingVisuals() {
+    document.body.classList.remove('sidebar-open');
   }
 
   function isChromeAvailable() {
@@ -151,16 +163,8 @@
           img.src = data.quoteImage;                    // Set image source to data URL
           msg.textContent = "Your beautified quote is ready!";
           // Prime current text for editing
-          chrome.storage.local.get(["quotura:quoteText", "quoteText"], (t) => {
-            // Migration: check both old and new keys
-            if (t && t["quotura:quoteText"]) {
-              currentText = t["quotura:quoteText"];
-            } else if (t && t.quoteText) {
-              currentText = t.quoteText;
-              // Migrate old key to new key
-              chrome.storage.local.set({ "quotura:quoteText": t.quoteText });
-              chrome.storage.local.remove("quoteText");
-            }
+          chrome.storage.local.get(["quoteText"], (t) => {
+            if (t && t.quoteText) currentText = t.quoteText;
           });
           
           // Enable export buttons
@@ -445,448 +449,236 @@
     }, 300);
   }
   
-  // Text selection and formatting functions
-  function updateTextSelection() {
-    // For canvas-based text editing, we'll create an overlay text area
-    // that appears over the image when editing
-    if (!currentText) return;
-    
-    // Create or update text editing overlay
-    let textOverlay = document.getElementById('textOverlay');
-    if (!textOverlay) {
-      textOverlay = document.createElement('div');
-      textOverlay.id = 'textOverlay';
-      textOverlay.style.cssText = `
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.3);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 100;
-        cursor: pointer;
-      `;
-      
-      const textArea = document.createElement('textarea');
-      textArea.id = 'canvasTextArea';
-      textArea.style.cssText = `
-        background: rgba(255, 255, 255, 0.95);
-        border: 2px solid #667eea;
-        border-radius: 8px;
-        padding: 16px;
-        font-size: ${currentFontSize}px;
-        font-family: ${currentFont};
-        color: ${currentTextColor};
-        text-align: ${currentAlignment};
-        width: 80%;
-        height: 60%;
-        resize: none;
-        outline: none;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-      `;
-      textArea.value = currentText;
-      
-      textOverlay.appendChild(textArea);
-      document.getElementById('imageContainer').appendChild(textOverlay);
-      
-      // Focus and select all text
-      textArea.focus();
-      textArea.select();
-      
-      // Handle text changes
-      textArea.addEventListener('input', (e) => {
-        currentText = e.target.value;
+  /**
+   * Handle Quick Edit button click - shows edit panel
+   */
+  function handleQuickEdit() {
+    if (!editMode) {
+      // Enter edit mode - show panel
+      editMode = true;
+      editPanel.classList.add("active");
+      quickEditBtn.style.opacity = "0.7";
+      showEditingVisuals();
+      // Prefill textarea with current text
+      if (quoteInput) {
         if (isChromeAvailable()) {
-          chrome.storage.local.set({ "quotura:quoteText": currentText });
+          chrome.storage.local.get(["quoteText"], (data) => {
+            const val = (data && data.quoteText) || currentText || "";
+            quoteInput.value = val;
+          });
+        } else {
+          quoteInput.value = currentText || "";
         }
-        debounceRegenerateWithNewText();
-      });
-      
-      // Handle selection changes
-      textArea.addEventListener('select', () => {
-        const start = textArea.selectionStart;
-        const end = textArea.selectionEnd;
-        textSelection = { start, end, text: currentText };
-        updateControlStates();
-      });
-      
-      // Handle clicks outside to close
-      textOverlay.addEventListener('click', (e) => {
-        if (e.target === textOverlay) {
-          closeTextOverlay();
-        }
-      });
-      
-      // Handle escape key
-      textArea.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          closeTextOverlay();
-        }
-      });
-    }
-    
-    // Update text selection state
-    const textArea = document.getElementById('canvasTextArea');
-    if (textArea) {
-      const start = textArea.selectionStart;
-      const end = textArea.selectionEnd;
-      textSelection = { start, end, text: currentText };
-      updateControlStates();
+      }
     }
   }
-  
-  function closeTextOverlay() {
-    const textOverlay = document.getElementById('textOverlay');
-    if (textOverlay) {
-      textOverlay.remove();
-    }
-    textSelection = null;
-    updateControlStates();
+
+  /**
+   * Open inline editor overlay for editing quote content with live preview
+   */
+  function handleEditText() {
+    openInlineEditor();
   }
-  
+
+  // Simple HTML escape for initial textarea content
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Debounced regenerate to keep typing responsive
   function debounceRegenerateWithNewText() {
     if (regenerateDebounceId) clearTimeout(regenerateDebounceId);
     regenerateDebounceId = setTimeout(() => {
-      regenerateWithSettings();
+      regenerateWithSettingsUsingText(currentText || "");
     }, 250);
   }
 
-  function updateControlStates() {
-    const hasSelection = textSelection && textSelection.start !== textSelection.end;
-    const controls = [
-      fontSelect, fontSizeInput, decreaseSizeBtn, increaseSizeBtn,
-      boldBtn, italicBtn, underlineBtn, ...colorSwatches, customColorPicker,
-      alignLeftBtn, alignCenterBtn, alignRightBtn, ...backgroundOptions, backgroundUpload
-    ];
-    
-    controls.forEach(control => {
-      if (control) {
-        control.disabled = !hasSelection;
-        control.setAttribute('aria-disabled', !hasSelection);
-        
-        // Update tabindex for keyboard navigation
-        if (control.hasAttribute('tabindex')) {
-          control.setAttribute('tabindex', hasSelection ? '0' : '-1');
-        }
-      }
-    });
-    
-    // Update helper text
-    const helper = document.getElementById('selection-helper');
-    if (helper) {
-      helper.textContent = hasSelection ? 'Text selected - formatting enabled' : 'Select text to enable formatting';
+  // Regenerate using explicit text value instead of fetching from storage
+  function regenerateWithSettingsUsingText(textValue) {
+    if (!isChromeAvailable()) {
+      msg.textContent = "Settings updated (preview only)";
+      return;
     }
-  }
-
-  function updateColorSwatches(selectedColor) {
-    colorSwatches.forEach(swatch => {
-      const color = swatch.dataset.color;
-      swatch.classList.toggle('active', color === selectedColor);
-    });
-    if (customColorPicker) {
-      customColorPicker.value = selectedColor;
-    }
-  }
-
-  function updateAlignmentButtons(selectedAlignment) {
-    [alignLeftBtn, alignCenterBtn, alignRightBtn].forEach(btn => {
-      if (btn) {
-        btn.classList.toggle('active', btn.id === `align${selectedAlignment.charAt(0).toUpperCase() + selectedAlignment.slice(1)}Btn`);
-      }
-    });
-  }
-
-  function updateBackgroundOptions(selectedType) {
-    backgroundOptions.forEach(option => {
-      const type = option.dataset.type;
-      option.classList.toggle('active', type === selectedType);
-    });
-  }
-  
-  // Panel control handlers
-  function handleFontChange() {
-    if (fontSelect && !fontSelect.disabled) {
-      currentFont = fontSelect.value;
-      
-      // Apply font to textarea
-      const textArea = document.getElementById('canvasTextArea');
-      if (textArea) {
-        textArea.style.fontFamily = currentFont;
-      }
-      
-      regenerateWithSettings();
-      showNotification(`Font changed to ${currentFont}!`, "success");
-    }
-  }
-
-  function handleFontSizeChange() {
-    if (fontSizeInput && !fontSizeInput.disabled) {
-      const newSize = parseInt(fontSizeInput.value);
-      if (newSize >= 12 && newSize <= 60) {
-        currentFontSize = newSize;
-        
-        // Apply font size to textarea
-        const textArea = document.getElementById('canvasTextArea');
-        if (textArea) {
-          textArea.style.fontSize = currentFontSize + 'px';
-        }
-        
-        regenerateWithSettings();
-        showNotification(`Font size changed to ${currentFontSize}px!`, "success");
+    msg.textContent = "Updating with new settings...";
+    disableExportButtons();
+    chrome.runtime.sendMessage({
+      action: "regenerateWithSettings",
+      text: textValue,
+      font: currentFont,
+      fontSize: currentFontSize,
+      includeWatermark: !watermarkRemoved,
+      gradient: currentGradientChoice
+    }, (response) => {
+      if (response && response.imageData) {
+        currentImageData = response.imageData;
+        img.src = response.imageData;
+        msg.textContent = "Settings updated successfully!";
+        enableExportButtons();
       } else {
-        fontSizeInput.value = currentFontSize; // Reset to current value
-        showNotification("Font size must be between 12px and 60px", "error");
+        msg.textContent = "Failed to update settings";
+        showNotification("Failed to update settings", "error");
       }
-    }
-  }
-
-  function handleSizeButtonChange(delta) {
-    const newSize = currentFontSize + delta;
-    if (newSize >= 12 && newSize <= 60) {
-      currentFontSize = newSize;
-      if (fontSizeInput) fontSizeInput.value = currentFontSize;
-      regenerateWithSettings();
-      showNotification(`Font size ${delta > 0 ? 'increased' : 'decreased'} to ${currentFontSize}px!`, "success");
-    } else {
-      const limit = newSize < 12 ? "minimum" : "maximum";
-      const limitValue = newSize < 12 ? "12px" : "60px";
-      showNotification(`${limit} font size is ${limitValue}`, "error");
-    }
-  }
-
-  function handleFormattingChange(formatType) {
-    if (!textSelection || textSelection.start === textSelection.end) {
-      showNotification("Please select some text to format", "error");
-      return;
-    }
-    
-    // Apply formatting to selected text in the textarea
-    const textArea = document.getElementById('canvasTextArea');
-    if (textArea) {
-      const start = textSelection.start;
-      const end = textSelection.end;
-      const selectedText = textArea.value.substring(start, end);
-      
-      let formattedText = selectedText;
-      switch (formatType) {
-        case 'bold':
-          formattedText = `<b>${selectedText}</b>`;
-          break;
-        case 'italic':
-          formattedText = `<i>${selectedText}</i>`;
-          break;
-        case 'underline':
-          formattedText = `<u>${selectedText}</u>`;
-          break;
-      }
-      
-      // Replace the selected text with formatted text
-      const newText = textArea.value.substring(0, start) + formattedText + textArea.value.substring(end);
-      textArea.value = newText;
-      currentText = newText;
-      
-      // Update selection to cover the new formatted text
-      textArea.setSelectionRange(start, start + formattedText.length);
-      
-      if (isChromeAvailable()) {
-        chrome.storage.local.set({ quoteText: currentText });
-      }
-      
-      showNotification(`${formatType} formatting applied!`, "success");
-      debounceRegenerateWithNewText();
-    }
-  }
-
-  function handleColorChange(color) {
-    if (!textSelection || textSelection.start === textSelection.end) {
-      showNotification("Please select some text to change color", "error");
-      return;
-    }
-    
-    currentTextColor = color;
-    updateColorSwatches(color);
-    
-    // Apply color to selected text
-    const textArea = document.getElementById('canvasTextArea');
-    if (textArea) {
-      const start = textSelection.start;
-      const end = textSelection.end;
-      const selectedText = textArea.value.substring(start, end);
-      const coloredText = `<span style="color: ${color}">${selectedText}</span>`;
-      
-      const newText = textArea.value.substring(0, start) + coloredText + textArea.value.substring(end);
-      textArea.value = newText;
-      currentText = newText;
-      
-      // Update selection
-      textArea.setSelectionRange(start, start + coloredText.length);
-      
-      if (isChromeAvailable()) {
-        chrome.storage.local.set({ quoteText: currentText });
-      }
-      
-      showNotification(`Text color changed!`, "success");
-      debounceRegenerateWithNewText();
-    }
-  }
-
-  function handleAlignmentChange(alignment) {
-    currentAlignment = alignment;
-    updateAlignmentButtons(alignment);
-    
-    // Apply alignment to the textarea
-    const textArea = document.getElementById('canvasTextArea');
-    if (textArea) {
-      textArea.style.textAlign = alignment;
-    }
-    
-    showNotification(`Text alignment changed to ${alignment}!`, "success");
-    regenerateWithSettings();
-  }
-
-  function handleBackgroundChange(type) {
-    currentBackgroundType = type;
-    updateBackgroundOptions(type);
-    
-    if (type === 'random') {
-      currentGradientChoice = null;
-      showNotification('Background set to random', 'success');
-    } else if (type === 'transparent') {
-      currentGradientChoice = 'transparent';
-      showNotification('Background set to transparent', 'success');
-    } else if (type === 'preset') {
-      // Open gradient picker modal
-      handleBackgroundChange();
-      return;
-    } else if (type === 'upload') {
-      if (backgroundUpload) {
-        backgroundUpload.click();
-      }
-      return;
-    }
-    
-    regenerateWithSettings();
+    });
   }
   
-  // Background gradient picker (simplified version)
-  function openGradientPicker() {
-    const modal = createGradientPickerModal();
+  /**
+   * Inline editor helpers
+   */
+  function getBrightness(hex) {
+    const rgb = parseInt(hex.slice(1), 16);
+    const r = (rgb >> 16) & 0xff;
+    const g = (rgb >> 8) & 0xff;
+    const b = rgb & 0xff;
+    return (r * 299 + g * 587 + b * 114) / 1000;
+  }
+
+  function syncInlineEditorStyles() {
+    // No-op in side-panel mode; maintained for API compatibility
+  }
+
+  function placeCaretAtEnd(el) {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function openInlineEditor() {
+    // Show side panel and focus textarea instead of inline overlay
+    handleQuickEdit();
+    if (!quoteInput) return;
+    const setAndFocus = (value) => {
+      quoteInput.value = value;
+      quoteInput.focus();
+      try {
+        const len = quoteInput.value.length;
+        quoteInput.setSelectionRange(len, len);
+      } catch (_) {}
+    };
+    if (isChromeAvailable()) {
+      chrome.storage.local.get(["quoteText"], (data) => {
+        currentText = (data && data.quoteText) || currentText || "";
+        setAndFocus(currentText);
+      });
+    } else {
+      currentText = currentText || "";
+      setAndFocus(currentText);
+    }
+  }
+
+  function closeInlineEditor() {
+    inlineEditing = false;
+    hideEditingVisuals();
+  }
+  
+  /**
+   * Handle font selection - creates beautiful font picker modal
+   */
+  function handleFontChange() {
+    // Create font picker modal
+    const modal = createFontPickerModal();
     document.body.appendChild(modal);
+    
+    // Animate in
     setTimeout(() => {
       modal.classList.add('active');
     }, 10);
   }
   
-  // Background gradient picker modal (simplified)
-  function createGradientPickerModal() {
-    const gradients = [
-      { name: "Blue", colors: ["#4facfe", "#00f2fe"] },
-      { name: "Green Teal", colors: ["#43e97b", "#38f9d7"] },
-      { name: "Pink Yellow", colors: ["#fa709a", "#fee140"] },
-      { name: "Teal Purple", colors: ["#30cfd0", "#330867"] },
-      { name: "Soft Pink", colors: ["#ff9a9e", "#fad0c4"] },
-      { name: "Sky Blue", colors: ["#a1c4fd", "#c2e9fb"] },
-      { name: "Violet", colors: ["#667eea", "#764ba2"] },
-      { name: "Pastel", colors: ["#fddb92", "#d1fdff"] },
+  /**
+   * Create beautiful font picker modal
+   */
+  function createFontPickerModal() {
+    const fonts = [
+      { name: "Arial", display: "Arial", description: "Clean & Professional", sample: "The quick brown fox jumps" },
+      { name: "Georgia", display: "Georgia", description: "Elegant Serif", sample: "The quick brown fox jumps" },
+      { name: "Helvetica", display: "Helvetica", description: "Modern Classic", sample: "The quick brown fox jumps" },
+      { name: "Times New Roman", display: "Times", description: "Traditional Serif", sample: "The quick brown fox jumps" },
+      { name: "Verdana", display: "Verdana", description: "Clear & Readable", sample: "The quick brown fox jumps" }
     ];
     
     const modal = document.createElement('div');
-    modal.className = 'gradient-picker-modal';
-    
-    const optionsHTML = [
-      `<div class="gradient-option random-option" data-colors="random">
-        <div class="gradient-swatch" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)">RANDOM</div>
-        <div class="gradient-name">Random</div>
-      </div>`,
-      `<div class="gradient-option transparent-option" data-colors="transparent">
-        <div class="gradient-swatch transparent-pattern"></div>
-        <div class="gradient-name">Transparent</div>
-      </div>`,
-      ...gradients.map(g => `
-        <div class="gradient-option" data-colors='${JSON.stringify(g.colors)}'>
-          <div class="gradient-swatch" style="background: linear-gradient(135deg, ${g.colors[0]} 0%, ${g.colors[1]} 100%)"></div>
-          <div class="gradient-name">${g.name}</div>
-        </div>
-      `)
-    ].join('');
-    
+    modal.className = 'font-picker-modal';
     modal.innerHTML = `
-      <div class="gradient-picker-backdrop"></div>
-      <div class="gradient-picker-container">
-        <div class="gradient-picker-header">
-          <h3>Choose Background</h3>
+      <div class="font-picker-backdrop"></div>
+      <div class="font-picker-container">
+        <div class="font-picker-header">
+          <h3>Choose Font Style</h3>
           <button class="close-btn">✕</button>
         </div>
-        <div class="gradient-grid">
-          ${optionsHTML}
+        <div class="font-options">
+          ${fonts.map((font, index) => `
+            <div class="font-option ${font.name === currentFont ? 'selected' : ''}" data-font="${font.name}">
+              <div class="font-info">
+                <div class="font-name" style="font-family: ${font.name}">${font.display}</div>
+                <div class="font-desc">${font.description}</div>
+              </div>
+              <div class="font-sample" style="font-family: ${font.name}">${font.sample}</div>
+              <div class="select-indicator">✓</div>
+            </div>
+          `).join('')}
         </div>
       </div>
     `;
     
+    // Add event listeners
     const closeBtn = modal.querySelector('.close-btn');
-    const backdrop = modal.querySelector('.gradient-picker-backdrop');
-    const options = modal.querySelectorAll('.gradient-option');
+    const backdrop = modal.querySelector('.font-picker-backdrop');
+    const options = modal.querySelectorAll('.font-option');
     
-    const close = () => closeGradientPicker(modal);
-    closeBtn.addEventListener('click', close);
-    backdrop.addEventListener('click', close);
+    closeBtn.addEventListener('click', () => closeFontPicker(modal));
+    backdrop.addEventListener('click', () => closeFontPicker(modal));
     
     options.forEach(option => {
       option.addEventListener('click', () => {
-        const data = option.getAttribute('data-colors');
-        if (data === 'random') {
-          currentGradientChoice = null;
-          currentBackgroundType = 'random';
-          updateBackgroundOptions('random');
-          if (isChromeAvailable()) {
-            chrome.storage.local.remove(['customBackgroundImage', 'currentGradient'], () => {
-              regenerateWithSettings();
-              showNotification('Background set to random', 'success');
-            });
-          } else {
-            regenerateWithSettings();
-          }
-        } else if (data === 'transparent') {
-          currentGradientChoice = 'transparent';
-          currentBackgroundType = 'transparent';
-          updateBackgroundOptions('transparent');
-          regenerateWithSettings();
-          showNotification('Background set to transparent', 'success');
-        } else {
-          try {
-            const colors = JSON.parse(data);
-            currentGradientChoice = colors;
-            currentBackgroundType = 'preset';
-            updateBackgroundOptions('preset');
-            if (isChromeAvailable()) {
-              chrome.storage.local.set({ currentGradient: colors }, () => {
-                chrome.storage.local.remove('customBackgroundImage', () => {
-                  regenerateWithSettings();
-                  showNotification('Background updated!', 'success');
-                });
-              });
-            } else {
-              regenerateWithSettings();
-            }
-          } catch (_) {}
-        }
-        close();
+        const fontName = option.dataset.font;
+        selectFont(fontName, modal);
       });
     });
     
     return modal;
   }
   
-  function closeGradientPicker(modal) {
+  /**
+   * Select font and update image
+   */
+  function selectFont(fontName, modal) {
+    if (fontName !== currentFont) {
+      currentFont = fontName;
+      regenerateWithSettings();
+      showNotification(`Font changed to ${fontName}!`, "success");
+      if (inlineEditing) syncInlineEditorStyles();
+    }
+    closeFontPicker(modal);
+  }
+  
+  /**
+   * Close font picker with animation
+   */
+  function closeFontPicker(modal) {
     modal.classList.add('closing');
     setTimeout(() => {
       if (modal && modal.parentNode) {
         document.body.removeChild(modal);
       }
     }, 300);
+  }
+  
+  /**
+   * Handle background selection - opens gradient picker modal
+   */
+  function handleBackgroundChange() {
+    const modal = createGradientPickerModal();
+    document.body.appendChild(modal);
+    setTimeout(() => {
+      modal.classList.add('active');
+    }, 10);
   }
   
   /**
@@ -1035,7 +827,46 @@
     }, 300);
   }
   
-  // This function is now handled by handleSizeButtonChange above
+  /**
+   * Handle font size increase/decrease
+   */
+  function handleSizeChange(delta) {
+    const newSize = currentFontSize + delta;
+    
+    // Constrain size between 12px and 60px
+    if (newSize >= 12 && newSize <= 60) {
+      currentFontSize = newSize;
+      
+      // Update display with animation
+      currentSizeDisplay.classList.add("updating");
+      currentSizeDisplay.textContent = currentFontSize;
+      
+      setTimeout(() => {
+        currentSizeDisplay.classList.remove("updating");
+      }, 300);
+      
+      // Update inline editor style if open
+      if (inlineEditing) syncInlineEditorStyles();
+      
+      // Regenerate image with new size
+      regenerateWithSettings();
+      
+      // Show subtle notification
+      const action = delta > 0 ? "increased" : "decreased";
+      showNotification(`Font size ${action} to ${currentFontSize}px!`, "success");
+    } else {
+      // Show size limit notification
+      const limit = newSize < 12 ? "minimum" : "maximum";
+      const limitValue = newSize < 12 ? "12px" : "60px";
+      showNotification(`${limit} font size is ${limitValue}`, "error");
+      
+      // Brief shake animation for feedback
+      currentSizeDisplay.style.animation = "shake 0.3s ease-in-out";
+      setTimeout(() => {
+        currentSizeDisplay.style.animation = "";
+      }, 300);
+    }
+  }
   
   /**
    * Regenerate image with current font and size settings
@@ -1045,30 +876,18 @@
       msg.textContent = "Settings updated (preview only)";
       return;
     }
-    chrome.storage.local.get(["quotura:quoteText", "quoteText"], (data) => {
-      // Migration: check both old and new keys
-      const text = data["quotura:quoteText"] || data.quoteText;
-      if (text) {
+    chrome.storage.local.get(["quoteText"], (data) => {
+      if (data.quoteText) {
         msg.textContent = "Updating with new settings...";
         disableExportButtons();
         
-        // Handle transparent background
-        if (currentGradientChoice === 'transparent') {
-          // For transparent background, we'll need to modify the background script
-          // For now, just use a random gradient
-          currentGradientChoice = null;
-        }
-        
         chrome.runtime.sendMessage({
           action: "regenerateWithSettings",
-          text: text,
+          text: data.quoteText,
           font: currentFont,
           fontSize: currentFontSize,
           includeWatermark: !watermarkRemoved,
-          gradient: currentGradientChoice,
-          backgroundType: currentBackgroundType,
-          textColor: currentTextColor,
-          alignment: currentAlignment
+          gradient: currentGradientChoice // Pass the current gradient choice
         }, (response) => {
           if (response && response.imageData) {
             currentImageData = response.imageData;
@@ -1084,143 +903,70 @@
     });
   }
   
-  // Initialize panel state
-  updateControlStates();
+  /**
+   * Handle Done button click - hides edit panel
+   */
+  function handleDone() {
+    // Persist the latest text from side-panel textarea and regenerate
+    if (quoteInput) {
+      const finalText = (quoteInput.value || "").replace(/\r\n/g, '\n');
+      currentText = finalText;
+      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: finalText });
+      regenerateWithSettingsUsingText(finalText);
+    }
+
+    if (editMode) {
+      // Exit edit mode with animation
+      editPanel.classList.add("exiting");
+      editPanel.classList.remove("active");
+      
+      setTimeout(() => {
+        editPanel.classList.remove("exiting");
+        editMode = false;
+        quickEditBtn.style.opacity = "1";
+      }, 400);
+    }
+    hideEditingVisuals();
+  }
    
-  // Event listeners for export buttons
+   // Event listeners for export buttons
   downloadPngBtn.addEventListener("click", downloadPNG);
   downloadSvgBtn.addEventListener("click", downloadSVG);
   copyImageBtn.addEventListener("click", copyToClipboard);
   removeWatermarkBtn.addEventListener("click", handleRemoveWatermarkClick);
   
-  // Event listeners for editor panel
-  if (closePanelBtn) {
-    closePanelBtn.addEventListener("click", closeEditorPanel);
-  }
+  // Event listener for quick edit
+  quickEditBtn.addEventListener("click", handleQuickEdit);
   
-  // Open panel and text editing when image is clicked
-  img.addEventListener("click", () => {
-    openEditorPanel();
-    updateTextSelection();
-  });
+  // Event listeners for edit panel
+  fontBtn.addEventListener("click", handleFontChange);
+  backgroundBtn.addEventListener("click", handleBackgroundChange);
+  decreaseSizeBtn.addEventListener("click", () => handleSizeChange(-2));
+  increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
+  doneBtn.addEventListener("click", handleDone);
+  editTextBtn.addEventListener("click", handleEditText);
+  if (inlineDoneBtn) inlineDoneBtn.addEventListener('click', handleDone);
   
-  // Panel control event listeners
-  if (fontSelect) {
-    fontSelect.addEventListener("change", handleFontChange);
-  }
+  // Open side panel when image is clicked
+  img.addEventListener("click", openInlineEditor);
   
-  if (fontSizeInput) {
-    fontSizeInput.addEventListener("change", handleFontSizeChange);
-    fontSizeInput.addEventListener("input", handleFontSizeChange);
-  }
-  
-  if (decreaseSizeBtn) {
-    decreaseSizeBtn.addEventListener("click", () => handleSizeButtonChange(-2));
-  }
-  
-  if (increaseSizeBtn) {
-    increaseSizeBtn.addEventListener("click", () => handleSizeButtonChange(2));
-  }
-  
-  // Formatting buttons
-  if (boldBtn) {
-    boldBtn.addEventListener("click", () => handleFormattingChange("bold"));
-  }
-  
-  if (italicBtn) {
-    italicBtn.addEventListener("click", () => handleFormattingChange("italic"));
-  }
-  
-  if (underlineBtn) {
-    underlineBtn.addEventListener("click", () => handleFormattingChange("underline"));
-  }
-  
-  // Color controls
-  colorSwatches.forEach(swatch => {
-    swatch.addEventListener("click", () => {
-      if (!swatch.disabled) {
-        handleColorChange(swatch.dataset.color);
-      }
-    });
-    
-    // Keyboard support for color swatches
-    swatch.addEventListener("keydown", (e) => {
-      if ((e.key === "Enter" || e.key === " ") && !swatch.disabled) {
-        e.preventDefault();
-        handleColorChange(swatch.dataset.color);
-      }
-    });
-  });
-  
-  if (customColorPicker) {
-    customColorPicker.addEventListener("change", (e) => {
-      if (!e.target.disabled) {
-        handleColorChange(e.target.value);
-      }
-    });
-  }
-  
-  // Alignment controls
-  if (alignLeftBtn) {
-    alignLeftBtn.addEventListener("click", () => handleAlignmentChange("left"));
-  }
-  
-  if (alignCenterBtn) {
-    alignCenterBtn.addEventListener("click", () => handleAlignmentChange("center"));
-  }
-  
-  if (alignRightBtn) {
-    alignRightBtn.addEventListener("click", () => handleAlignmentChange("right"));
-  }
-  
-  // Background controls
-  backgroundOptions.forEach(option => {
-    option.addEventListener("click", () => {
-      if (!option.disabled) {
-        handleBackgroundChange(option.dataset.type);
-      }
-    });
-    
-    // Keyboard support for background options
-    option.addEventListener("keydown", (e) => {
-      if ((e.key === "Enter" || e.key === " ") && !option.disabled) {
-        e.preventDefault();
-        handleBackgroundChange(option.dataset.type);
-      }
-    });
-  });
-  
-  if (backgroundUpload) {
-    backgroundUpload.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          currentGradientChoice = null;
-          if (isChromeAvailable()) {
-            chrome.storage.local.set({ customBackgroundImage: reader.result }, () => {
-              chrome.storage.local.remove('currentGradient', () => {
-                regenerateWithSettings();
-                showNotification('Background image updated!', 'success');
-              });
-            });
-          }
-        };
-        reader.readAsDataURL(file);
-      }
+  // Side-panel textarea live update (debounced)
+  if (quoteInput) {
+    quoteInput.addEventListener('input', () => {
+      const newText = (quoteInput.value || '').replace(/\r\n/g, '\n');
+      currentText = newText;
+      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
+      debounceRegenerateWithNewText();
     });
   }
 
-  // Close panel with Escape
+  // Close side panel with Escape
   document.addEventListener('keydown', (e) => {
-    if (panelOpen && e.key === 'Escape') {
+    if (editMode && e.key === 'Escape') {
       e.preventDefault();
-      closeEditorPanel();
+      handleDone();
     }
   });
-  
-  // Simulate text selection for demo (in real app, this would come from canvas text selection)
-  updateTextSelection();
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
