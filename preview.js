@@ -32,6 +32,7 @@
   const loginBtn = document.getElementById("loginBtn");
   const signupBtn = document.getElementById("signupBtn");
   const logoutBtn = document.getElementById("logoutBtn");
+  const resumeAuthBtn = document.getElementById("resumeAuthBtn");
   const authStatus = document.getElementById("authStatus");
   
   // State variables
@@ -181,7 +182,13 @@
     const loginUrlString = buildCognitoAuthUrl("login", COGNITO_CONFIG);
     const signupUrlString = buildCognitoAuthUrl("signup", COGNITO_CONFIG);
 
-    // Removed custom auth overlay: rely solely on Cognito Hosted UI popup
+    // Auth popup overlay elements
+    const authOverlay = document.getElementById("authPopupOverlay");
+    const authOpenExternalBtn = document.getElementById("authPopupOpenExternalBtn");
+    const authCloseBtn = document.getElementById("authPopupCloseBtn");
+    const authStatusTextEl = document.querySelector(".auth-popup-text");
+    let previouslyFocusedElement = null;
+    let pendingAuthFlow = null; // 'login' | 'signup' | null
 
     function tryCloseAuthPopupWindow() {
       try {
@@ -192,7 +199,109 @@
       } catch (_) {}
     }
 
-    // No custom overlay controls or manual popup button
+    function setPageInertExceptOverlay(enable) {
+      try {
+        if (!authOverlay) return;
+        const children = Array.from(document.body.children);
+        children.forEach((el) => {
+          if (el === authOverlay) return;
+          if (enable) {
+            el.setAttribute('inert', '');
+            el.setAttribute('aria-hidden', 'true');
+          } else {
+            el.removeAttribute('inert');
+            el.removeAttribute('aria-hidden');
+          }
+        });
+      } catch (_) {}
+    }
+
+    function focusAuthDialog() {
+      try {
+        if (!authOverlay) return;
+        const dialogContainer = authOverlay.querySelector('.auth-popup-container');
+        if (dialogContainer) {
+          if (!dialogContainer.hasAttribute('tabindex')) {
+            dialogContainer.setAttribute('tabindex', '-1');
+          }
+          dialogContainer.focus();
+          return;
+        }
+        // Fallback to first visible, enabled focusable element
+        const candidates = authOverlay.querySelectorAll('#authPopupCloseBtn, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        for (const el of candidates) {
+          const style = window.getComputedStyle(el);
+          const isHidden = style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
+          const isDisabled = el.hasAttribute('disabled') || el.getAttribute('aria-hidden') === 'true';
+          const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : { width: 0, height: 0 };
+          if (!isHidden && !isDisabled && rect.width > 0 && rect.height > 0 && typeof el.focus === 'function') {
+            el.focus();
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
+    function showAuthOverlay(message) {
+      try {
+        if (authStatusTextEl && message) authStatusTextEl.textContent = message;
+        if (authOverlay) {
+          previouslyFocusedElement = document.activeElement;
+          authOverlay.classList.add('active');
+          authOverlay.setAttribute('aria-hidden', 'false');
+          // First move focus into the dialog to avoid hiding a focused element
+          focusAuthDialog();
+          // Now hide the rest of the page from AT and interaction
+          setPageInertExceptOverlay(true);
+        }
+      } catch (_) {}
+    }
+
+    function hideAuthOverlay() {
+      try {
+        // Move focus OUT of the overlay BEFORE setting aria-hidden to avoid AOM blocking
+        if (
+          previouslyFocusedElement &&
+          document.contains(previouslyFocusedElement) &&
+          typeof previouslyFocusedElement.focus === 'function'
+        ) {
+          previouslyFocusedElement.focus();
+        } else {
+          // Fallback to a safe focus target not inside the overlay
+          const fallbackTargets = [loginBtn, signupBtn, logoutBtn, document.getElementById('message')];
+          let focused = false;
+          for (const target of fallbackTargets) {
+            if (!focused && target && typeof target.focus === 'function' && (!authOverlay || !authOverlay.contains(target))) {
+              try { target.focus(); focused = true; } catch (_) {}
+            }
+          }
+          if (!focused) {
+            try {
+              // Temporarily make body focusable for a safe blur target
+              const hadTabindex = document.body.hasAttribute('tabindex');
+              if (!hadTabindex) document.body.setAttribute('tabindex', '-1');
+              document.body.focus();
+              if (!hadTabindex) document.body.removeAttribute('tabindex');
+            } catch (_) {}
+          }
+        }
+
+        if (authOverlay) {
+          authOverlay.classList.remove('active');
+          // Only now hide from assistive tech
+          authOverlay.setAttribute('aria-hidden', 'true');
+          setPageInertExceptOverlay(false);
+        }
+        previouslyFocusedElement = null;
+      } catch (_) {}
+    }
+
+    if (authCloseBtn) {
+      authCloseBtn.addEventListener('click', () => hideAuthOverlay());
+    }
+    if (authOpenExternalBtn) {
+      authOpenExternalBtn.addEventListener('click', () => startCognitoAuthFlow('login'));
+    }
 
     function getIdentityRedirectUri() {
       try {
@@ -205,11 +314,13 @@
 
     function startCognitoAuthFlow(action) {
       const useAction = action === 'signup' ? 'signup' : 'login';
+      pendingAuthFlow = useAction;
       const identityRedirectUri = getIdentityRedirectUri();
       const authUrlForIdentity = buildCognitoAuthUrl(useAction, COGNITO_CONFIG, identityRedirectUri);
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
 
-      // Open Cognito popup without custom overlay
+      // Optional: brief status overlay while the popup opens
+      showAuthOverlay('Opening secure sign-in…');
 
       // Open a placeholder popup synchronously to avoid popup blockers
       let popupRef = null;
@@ -238,6 +349,10 @@
               } catch (_) {
                 window.location.href = fallbackAuthUrl;
               }
+              if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+              try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
+              // Reveal manual open button in case popup was blocked or needs user action
+              try { if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
               return;
             }
             if (typeof responseUrl === 'string' && responseUrl.includes('?')) {
@@ -247,15 +362,18 @@
                 if (code) {
                   setSignedIn(true, code);
                   updateAuthUI(true);
+                  hideAuthOverlay();
                   showNotification('Signed in successfully!', 'success');
                   // Close placeholder popup if we opened one
                   try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
                   // Also try to close any named popup if browsers reused it
                   tryCloseAuthPopupWindow();
+                  try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
                   return;
                 }
               } catch (_) {}
             }
+            if (authStatusTextEl) authStatusTextEl.textContent = 'Sign-in was cancelled or did not complete.';
             // Close placeholder if nothing happened
             try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
           });
@@ -275,6 +393,8 @@
       } catch (_) {
         window.location.href = fallbackAuthUrl;
       }
+      if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+      try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
     }
 
     function getLogoutUrl() {
@@ -313,11 +433,21 @@
         loginBtn.style.display = "none";
         signupBtn.style.display = "none";
         logoutBtn.style.display = "inline-block";
+        if (resumeAuthBtn) resumeAuthBtn.style.display = 'none';
       } else {
         authStatus.textContent = "You are not signed in.";
         loginBtn.style.display = "inline-block";
         signupBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
+        if (resumeAuthBtn) {
+          try {
+            chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
+              const shouldShow = !!(data && data.pendingAuthFlow && data.pendingAuthVisible);
+              resumeAuthBtn.style.display = shouldShow ? 'inline-block' : 'none';
+              resumeAuthBtn.textContent = data && data.pendingAuthFlow === 'signup' ? '🔁 Resume sign-up' : '🔁 Resume sign-in';
+            });
+          } catch (_) {}
+        }
       }
     }
 
@@ -332,7 +462,18 @@
         startCognitoAuthFlow('signup');
       });
     }
-    // No resume button: keep Cognito popup open until user completes
+    if (resumeAuthBtn) {
+      resumeAuthBtn.addEventListener('click', () => {
+        if (isChromeAvailable()) {
+          chrome.storage.local.get(['pendingAuthFlow'], (data) => {
+            const flow = (data && data.pendingAuthFlow) || 'login';
+            startCognitoAuthFlow(flow);
+          });
+        } else {
+          startCognitoAuthFlow('login');
+        }
+      });
+    }
     if (logoutBtn) {
       logoutBtn.addEventListener("click", () => {
         setSignedIn(false);
@@ -378,16 +519,32 @@
             const newVal = !!(changes.cognitoSignedIn && changes.cognitoSignedIn.newValue);
             updateAuthUI(newVal);
             if (newVal) {
+              hideAuthOverlay();
               tryCloseAuthPopupWindow();
+              try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
             }
           }
         });
       }
     } catch (_) {}
 
-    // Otherwise, restore last-known state
+    // Otherwise, restore last-known state and pending overlay if any
     getSignedIn((signedIn) => {
       updateAuthUI(signedIn);
+      if (!signedIn) {
+        try {
+          chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
+            if (data && data.pendingAuthFlow && data.pendingAuthVisible) {
+              const text = data.pendingAuthFlow === 'signup' ? 'Please complete sign-up in the popup…' : 'Please complete sign-in in the popup…';
+              showAuthOverlay(text);
+              if (resumeAuthBtn) {
+                resumeAuthBtn.style.display = 'inline-block';
+                resumeAuthBtn.textContent = data.pendingAuthFlow === 'signup' ? '🔁 Resume sign-up' : '🔁 Resume sign-in';
+              }
+            }
+          });
+        } catch (_) {}
+      }
     });
   }
   
