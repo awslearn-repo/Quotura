@@ -188,6 +188,15 @@
     const authStatusTextEl = document.querySelector(".auth-popup-text");
     let previouslyFocusedElement = null;
 
+    function tryCloseAuthPopupWindow() {
+      try {
+        const possiblePopup = window.open('', 'quotura-auth');
+        if (possiblePopup && !possiblePopup.closed) {
+          possiblePopup.close();
+        }
+      } catch (_) {}
+    }
+
     function setPageInertExceptOverlay(enable) {
       try {
         if (!authOverlay) return;
@@ -216,9 +225,18 @@
           dialogContainer.focus();
           return;
         }
-        // Fallback to first focusable element
-        const fallback = authOverlay.querySelector('#authPopupCloseBtn, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-        if (fallback && typeof fallback.focus === 'function') fallback.focus();
+        // Fallback to first visible, enabled focusable element
+        const candidates = authOverlay.querySelectorAll('#authPopupCloseBtn, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        for (const el of candidates) {
+          const style = window.getComputedStyle(el);
+          const isHidden = style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
+          const isDisabled = el.hasAttribute('disabled') || el.getAttribute('aria-hidden') === 'true';
+          const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : { width: 0, height: 0 };
+          if (!isHidden && !isDisabled && rect.width > 0 && rect.height > 0 && typeof el.focus === 'function') {
+            el.focus();
+            return;
+          }
+        }
       } catch (_) {}
     }
 
@@ -229,21 +247,48 @@
           previouslyFocusedElement = document.activeElement;
           authOverlay.classList.add('active');
           authOverlay.setAttribute('aria-hidden', 'false');
-          setPageInertExceptOverlay(true);
+          // First move focus into the dialog to avoid hiding a focused element
           focusAuthDialog();
+          // Now hide the rest of the page from AT and interaction
+          setPageInertExceptOverlay(true);
         }
       } catch (_) {}
     }
 
     function hideAuthOverlay() {
       try {
+        // Move focus OUT of the overlay BEFORE setting aria-hidden to avoid AOM blocking
+        if (
+          previouslyFocusedElement &&
+          document.contains(previouslyFocusedElement) &&
+          typeof previouslyFocusedElement.focus === 'function'
+        ) {
+          previouslyFocusedElement.focus();
+        } else {
+          // Fallback to a safe focus target not inside the overlay
+          const fallbackTargets = [loginBtn, signupBtn, logoutBtn, document.getElementById('message')];
+          let focused = false;
+          for (const target of fallbackTargets) {
+            if (!focused && target && typeof target.focus === 'function' && (!authOverlay || !authOverlay.contains(target))) {
+              try { target.focus(); focused = true; } catch (_) {}
+            }
+          }
+          if (!focused) {
+            try {
+              // Temporarily make body focusable for a safe blur target
+              const hadTabindex = document.body.hasAttribute('tabindex');
+              if (!hadTabindex) document.body.setAttribute('tabindex', '-1');
+              document.body.focus();
+              if (!hadTabindex) document.body.removeAttribute('tabindex');
+            } catch (_) {}
+          }
+        }
+
         if (authOverlay) {
           authOverlay.classList.remove('active');
+          // Only now hide from assistive tech
           authOverlay.setAttribute('aria-hidden', 'true');
           setPageInertExceptOverlay(false);
-        }
-        if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
-          previouslyFocusedElement.focus();
         }
         previouslyFocusedElement = null;
       } catch (_) {}
@@ -251,6 +296,9 @@
 
     if (authCloseBtn) {
       authCloseBtn.addEventListener('click', () => hideAuthOverlay());
+    }
+    if (authOpenExternalBtn) {
+      authOpenExternalBtn.addEventListener('click', () => startCognitoAuthFlow('login'));
     }
 
     function getIdentityRedirectUri() {
@@ -299,6 +347,8 @@
                 window.location.href = fallbackAuthUrl;
               }
               if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+              // Reveal manual open button in case popup was blocked or needs user action
+              try { if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
               return;
             }
             if (typeof responseUrl === 'string' && responseUrl.includes('?')) {
@@ -312,6 +362,8 @@
                   showNotification('Signed in successfully!', 'success');
                   // Close placeholder popup if we opened one
                   try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
+                  // Also try to close any named popup if browsers reused it
+                  tryCloseAuthPopupWindow();
                   return;
                 }
               } catch (_) {}
@@ -416,12 +468,16 @@
       } catch (_) {}
       // If this page is opened as an auth popup, close it and return focus
       try {
+        const closeSelf = () => { try { window.close(); } catch (_) {} };
         if (window.opener && !window.opener.closed) {
           // Give storage listeners a moment to fire
           setTimeout(() => {
             try { window.opener.focus(); } catch (_) {}
-            window.close();
+            closeSelf();
           }, 100);
+        } else {
+          // No opener reference (e.g., stripped by browser); attempt to close anyway
+          setTimeout(closeSelf, 100);
         }
       } catch (_) {}
       return;
@@ -434,7 +490,10 @@
           if (areaName === 'local' && changes && Object.prototype.hasOwnProperty.call(changes, 'cognitoSignedIn')) {
             const newVal = !!(changes.cognitoSignedIn && changes.cognitoSignedIn.newValue);
             updateAuthUI(newVal);
-            if (newVal) hideAuthOverlay();
+            if (newVal) {
+              hideAuthOverlay();
+              tryCloseAuthPopupWindow();
+            }
           }
         });
       }
