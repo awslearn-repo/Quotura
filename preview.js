@@ -194,29 +194,86 @@
 
     // No custom overlay controls or manual popup button
 
+    function getIdentityRedirectUri() {
+      try {
+        if (isChromeAvailable() && chrome.runtime && chrome.runtime.id) {
+          return `https://${chrome.runtime.id}.chromiumapp.org/`;
+        }
+      } catch (_) {}
+      return COGNITO_CONFIG.redirectUri;
+    }
+
     function startCognitoAuthFlow(action) {
       const useAction = action === 'signup' ? 'signup' : 'login';
+      const identityRedirectUri = getIdentityRedirectUri();
+      const authUrlForIdentity = buildCognitoAuthUrl(useAction, COGNITO_CONFIG, identityRedirectUri);
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
 
-      // Always use our own named popup for the Hosted UI so it persists across tab/window switches
+      // Open Cognito popup without custom overlay
+
+      // Open a placeholder popup synchronously to avoid popup blockers
       let popupRef = null;
       try {
         const w = 520, h = 680;
         const left = Math.max(0, (window.screen.width - w) / 2);
         const top = Math.max(0, (window.screen.height - h) / 2);
         popupRef = window.open('about:blank', 'quotura-auth', `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+      } catch (_) {
+        // If blocked, fallback to full-page redirect as last resort
+      }
+
+      // If Chrome Identity API is available, prefer it (it will auto-close)
+      if (isChromeAvailable() && chrome.identity && chrome.identity.launchWebAuthFlow) {
+        try {
+          chrome.identity.launchWebAuthFlow({ url: authUrlForIdentity, interactive: true }, (responseUrl) => {
+            if (chrome.runtime && chrome.runtime.lastError) {
+              // Identity failed; use our already-open popup
+              try {
+                if (popupRef && !popupRef.closed) {
+                  popupRef.location = fallbackAuthUrl;
+                } else {
+                  // If popup was blocked/closed, navigate current page as a last resort
+                  window.open(fallbackAuthUrl, 'quotura-auth');
+                }
+              } catch (_) {
+                window.location.href = fallbackAuthUrl;
+              }
+              return;
+            }
+            if (typeof responseUrl === 'string' && responseUrl.includes('?')) {
+              try {
+                const parsed = new URL(responseUrl);
+                const code = parsed.searchParams.get('code');
+                if (code) {
+                  setSignedIn(true, code);
+                  updateAuthUI(true);
+                  showNotification('Signed in successfully!', 'success');
+                  // Close placeholder popup if we opened one
+                  try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
+                  // Also try to close any named popup if browsers reused it
+                  tryCloseAuthPopupWindow();
+                  return;
+                }
+              } catch (_) {}
+            }
+            // Close placeholder if nothing happened
+            try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
+          });
+          return;
+        } catch (_) {
+          // Fall back to manual popup if identity throws synchronously
+        }
+      }
+
+      // Identity API not available; navigate our already-open popup immediately
+      try {
         if (popupRef && !popupRef.closed) {
           popupRef.location = fallbackAuthUrl;
-          try { popupRef.focus(); } catch (_) {}
         } else {
           window.open(fallbackAuthUrl, 'quotura-auth');
         }
       } catch (_) {
-        // As a last resort, attempt to open/navigate the named window directly
-        try { window.open(fallbackAuthUrl, 'quotura-auth'); } catch (__) {
-          // If even that fails, fall back to navigating current tab
-          try { window.location.href = fallbackAuthUrl; } catch (___) {}
-        }
+        window.location.href = fallbackAuthUrl;
       }
     }
 
@@ -320,8 +377,9 @@
           if (areaName === 'local' && changes && Object.prototype.hasOwnProperty.call(changes, 'cognitoSignedIn')) {
             const newVal = !!(changes.cognitoSignedIn && changes.cognitoSignedIn.newValue);
             updateAuthUI(newVal);
-            // Only close our named popup after successful sign-in; otherwise keep it open even on tab switches
-            if (newVal) tryCloseAuthPopupWindow();
+            if (newVal) {
+              tryCloseAuthPopupWindow();
+            }
           }
         });
       }
