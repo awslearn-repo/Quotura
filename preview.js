@@ -306,18 +306,14 @@
 
     function handleAuthCancelled() {
       try {
-        // Keep overlay visible and offer manual open option
-        try { chrome.storage.local.set({ pendingAuthVisible: true }); } catch (_) {}
-        if (authStatusTextEl) {
-          try { authStatusTextEl.textContent = 'Sign-in was cancelled. You can try again using the button below.'; } catch (_) {}
-        }
-        if (authOpenExternalBtn) {
-          try { authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
-        }
-        if (authCloseBtn) {
-          try { authCloseBtn.style.display = ''; } catch (_) {}
-        }
+        // Clear any persisted pending flags and hide overlay immediately
+        try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
+        pendingAuthFlow = null;
+        hideAuthOverlay();
         tryCloseAuthPopupWindow();
+        if (resumeAuthBtn) {
+          try { resumeAuthBtn.style.display = 'none'; } catch (_) {}
+        }
         // Optional gentle notice without blocking the UI
         try { showNotification('Sign-in was cancelled.', 'info'); } catch (_) {}
       } catch (_) {}
@@ -339,15 +335,13 @@
 
     if (authCloseBtn) {
       authCloseBtn.addEventListener('click', () => {
-        // Allow closing at any time; clear pending state
+        // Do not allow closing while an auth flow is pending
+        if (pendingAuthFlow) return;
         hideAuthOverlay();
-        try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
-        pendingAuthFlow = null;
-        tryCloseAuthPopupWindow();
       });
     }
     if (authOpenExternalBtn) {
-      authOpenExternalBtn.addEventListener('click', () => startCognitoAuthFlow(pendingAuthFlow || 'login'));
+      authOpenExternalBtn.addEventListener('click', () => startCognitoAuthFlow('login'));
     }
 
     function getIdentityRedirectUri() {
@@ -362,17 +356,12 @@
     function startCognitoAuthFlow(action) {
       const useAction = action === 'signup' ? 'signup' : 'login';
       pendingAuthFlow = useAction;
-      try { chrome.storage.local.set({ pendingAuthFlow: useAction, pendingAuthVisible: true }); } catch (_) {}
       const identityRedirectUri = getIdentityRedirectUri();
       const authUrlForIdentity = buildCognitoAuthUrl(useAction, COGNITO_CONFIG, identityRedirectUri);
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
 
       // Optional: brief status overlay while the popup opens
       showAuthOverlay('Opening secure sign-in…');
-      try {
-        const titleEl = document.getElementById('authPopupTitle');
-        if (titleEl) titleEl.textContent = useAction === 'signup' ? 'Quotura Sign up' : 'Quotura Sign in';
-      } catch (_) {}
 
       // Open a placeholder popup synchronously to avoid popup blockers
       let popupRef = null;
@@ -404,12 +393,7 @@
               // Watch for user closing the manual popup to treat as cancellation
               try { if (popupRef) startPopupCloseWatcher(popupRef); } catch (_) {}
               // Reveal manual open button in case popup was blocked or needs user action
-              try {
-                if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block';
-                if (authStatusTextEl) authStatusTextEl.textContent = 'Could not open secure sign-in automatically. Use the button below.';
-                if (authCloseBtn) authCloseBtn.style.display = '';
-                chrome.storage.local.set({ pendingAuthVisible: true });
-              } catch (_) {}
+              try { if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
               return;
             }
             if (typeof responseUrl === 'string' && responseUrl.includes('?')) {
@@ -431,14 +415,10 @@
                 }
               } catch (_) {}
             }
-            // Treat as cancellation: keep overlay visible and present manual option
+            // Treat as cancellation: hide overlay and return to preview immediately
+            handleAuthCancelled();
+            // Close placeholder if nothing happened
             try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
-            try {
-              if (authStatusTextEl) authStatusTextEl.textContent = 'Sign-in didn\'t complete. Use the button below to continue.';
-              if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block';
-              if (authCloseBtn) authCloseBtn.style.display = '';
-              chrome.storage.local.set({ pendingAuthVisible: true });
-            } catch (_) {}
           });
           return;
         } catch (_) {
@@ -596,33 +576,8 @@
     getSignedIn((signedIn) => {
       updateAuthUI(signedIn);
       if (!signedIn) {
-        try {
-          if (isChromeAvailable()) {
-            chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
-              if (data && data.pendingAuthFlow && data.pendingAuthVisible) {
-                pendingAuthFlow = data.pendingAuthFlow;
-                showAuthOverlay('Opening secure sign-in…');
-                try {
-                  const titleEl = document.getElementById('authPopupTitle');
-                  if (titleEl) titleEl.textContent = data.pendingAuthFlow === 'signup' ? 'Quotura Sign up' : 'Quotura Sign in';
-                } catch (_) {}
-                try {
-                  const openBtn = document.getElementById('authPopupOpenExternalBtn');
-                  const closeBtn = document.getElementById('authPopupCloseBtn');
-                  if (openBtn) openBtn.style.display = 'inline-block';
-                  if (closeBtn) closeBtn.style.display = '';
-                } catch (_) {}
-              } else {
-                hideAuthOverlay();
-              }
-            });
-          } else {
-            hideAuthOverlay();
-          }
-        } catch (_) {
-          hideAuthOverlay();
-        }
-      } else {
+        // Ensure no intermediate auth overlay is restored or shown on reload
+        try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
         hideAuthOverlay();
       }
     });
