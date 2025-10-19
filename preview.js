@@ -249,10 +249,6 @@
           previouslyFocusedElement = document.activeElement;
           authOverlay.classList.add('active');
           authOverlay.setAttribute('aria-hidden', 'false');
-          // Prevent user from closing the overlay while auth is pending
-          if (authCloseBtn) {
-            try { authCloseBtn.style.display = 'none'; } catch (_) {}
-          }
           // First move focus into the dialog to avoid hiding a focused element
           focusAuthDialog();
           // Now hide the rest of the page from AT and interaction
@@ -295,21 +291,13 @@
           // Only now hide from assistive tech
           authOverlay.setAttribute('aria-hidden', 'true');
           setPageInertExceptOverlay(false);
-          // Restore close button visibility for next time
-          if (authCloseBtn) {
-            try { authCloseBtn.style.display = ''; } catch (_) {}
-          }
         }
         previouslyFocusedElement = null;
       } catch (_) {}
     }
 
     if (authCloseBtn) {
-      authCloseBtn.addEventListener('click', () => {
-        // Do not allow closing while an auth flow is pending
-        if (pendingAuthFlow) return;
-        hideAuthOverlay();
-      });
+      authCloseBtn.addEventListener('click', () => hideAuthOverlay());
     }
     if (authOpenExternalBtn) {
       authOpenExternalBtn.addEventListener('click', () => startCognitoAuthFlow('login'));
@@ -327,7 +315,6 @@
     function startCognitoAuthFlow(action) {
       const useAction = action === 'signup' ? 'signup' : 'login';
       pendingAuthFlow = useAction;
-      try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
       const identityRedirectUri = getIdentityRedirectUri();
       const authUrlForIdentity = buildCognitoAuthUrl(useAction, COGNITO_CONFIG, identityRedirectUri);
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
@@ -362,7 +349,7 @@
               } catch (_) {
                 window.location.href = fallbackAuthUrl;
               }
-              if (authStatusTextEl) authStatusTextEl.textContent = (pendingAuthFlow === 'signup') ? 'Signing up…' : 'Signing in…';
+              if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
               try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
               // Reveal manual open button in case popup was blocked or needs user action
               try { if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
@@ -382,17 +369,11 @@
                   // Also try to close any named popup if browsers reused it
                   tryCloseAuthPopupWindow();
                   try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
-                  pendingAuthFlow = null;
                   return;
                 }
               } catch (_) {}
             }
             if (authStatusTextEl) authStatusTextEl.textContent = 'Sign-in was cancelled or did not complete.';
-            // Allow user to close the overlay after cancellation
-            pendingAuthFlow = null;
-            if (authCloseBtn) {
-              try { authCloseBtn.style.display = ''; } catch (_) {}
-            }
             // Close placeholder if nothing happened
             try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
           });
@@ -412,7 +393,7 @@
       } catch (_) {
         window.location.href = fallbackAuthUrl;
       }
-      if (authStatusTextEl) authStatusTextEl.textContent = (pendingAuthFlow === 'signup') ? 'Signing up…' : 'Signing in…';
+      if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
       try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
     }
 
@@ -541,7 +522,6 @@
               hideAuthOverlay();
               tryCloseAuthPopupWindow();
               try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
-              pendingAuthFlow = null;
             }
           }
         });
@@ -555,10 +535,7 @@
         try {
           chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
             if (data && data.pendingAuthFlow && data.pendingAuthVisible) {
-              // Keep overlay visible with neutral, non-instructional text
-              const text = data.pendingAuthFlow === 'signup' ? 'Signing up…' : 'Signing in…';
-              // Sync in-memory state so close guard works after reload
-              pendingAuthFlow = data.pendingAuthFlow;
+              const text = data.pendingAuthFlow === 'signup' ? 'Please complete sign-up in the popup…' : 'Please complete sign-in in the popup…';
               showAuthOverlay(text);
               if (resumeAuthBtn) {
                 resumeAuthBtn.style.display = 'inline-block';
