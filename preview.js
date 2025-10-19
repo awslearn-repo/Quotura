@@ -40,6 +40,7 @@
   let currentFontSize = 28;
   let currentGradientChoice = null; // null means random
   let currentText = null;           // Current editable text content
+  let currentTextHtml = null;       // Current editable HTML content with formatting
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
 
@@ -980,8 +981,10 @@
       document.execCommand(command, false, null);
       // Persist content and refresh image
       const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
+      const newHtml = inlineEditor.innerHTML || '';
       currentText = newText;
-      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
+      currentTextHtml = newHtml;
+      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText, quoteTextHtml: newHtml });
       debounceRegenerateWithNewText();
       updateActiveFormatButtons();
       inlineEditor.focus();
@@ -1005,9 +1008,15 @@
 
   function openInlineEditor() {
     if (isChromeAvailable()) {
-      chrome.storage.local.get(["quoteText"], (data) => {
+      chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
         currentText = (data && data.quoteText) || currentText || "";
-        inlineEditor.textContent = currentText;
+        const storedHtml = data && data.quoteTextHtml;
+        if (storedHtml && typeof storedHtml === 'string' && storedHtml.length > 0) {
+          inlineEditor.innerHTML = storedHtml;
+          currentTextHtml = storedHtml;
+        } else {
+          inlineEditor.textContent = currentText;
+        }
         syncInlineEditorStyles();
         inlineEditing = true;
         inlineEditor.classList.add('active');
@@ -1018,7 +1027,11 @@
       });
     } else {
       currentText = currentText || "";
-      inlineEditor.textContent = currentText;
+      if (currentTextHtml && typeof currentTextHtml === 'string' && currentTextHtml.length > 0) {
+        inlineEditor.innerHTML = currentTextHtml;
+      } else {
+        inlineEditor.textContent = currentText;
+      }
       syncInlineEditorStyles();
       inlineEditing = true;
       inlineEditor.classList.add('active');
@@ -1371,8 +1384,10 @@
     // and trigger a final regenerate before closing the editor
     if (inlineEditing && inlineEditor) {
       const finalText = (inlineEditor.innerText || "").replace(/\r\n/g, '\n');
+      const finalHtml = inlineEditor.innerHTML || '';
       currentText = finalText;
-      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: finalText });
+      currentTextHtml = finalHtml;
+      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: finalText, quoteTextHtml: finalHtml });
       regenerateWithSettingsUsingText(finalText);
     }
 
@@ -1415,8 +1430,10 @@
   // Inline editor live update
   inlineEditor.addEventListener('input', () => {
     const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
+    const newHtml = inlineEditor.innerHTML || '';
     currentText = newText;
-    if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText });
+    currentTextHtml = newHtml;
+    if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText, quoteTextHtml: newHtml });
     debounceRegenerateWithNewText();
     updateActiveFormatButtons();
   });
