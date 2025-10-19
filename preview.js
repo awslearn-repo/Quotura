@@ -33,6 +33,13 @@
   const signupBtn = document.getElementById("signupBtn");
   const logoutBtn = document.getElementById("logoutBtn");
   const authStatus = document.getElementById("authStatus");
+  // Auth modal elements (in-page popup)
+  const authModal = document.getElementById("authModal");
+  const authIframe = document.getElementById("authIframe");
+  const authCloseBtn = document.getElementById("authCloseBtn");
+  const authBackdrop = document.getElementById("authBackdrop");
+  const authFallback = document.getElementById("authFallback");
+  const openAuthInWindowBtn = document.getElementById("openAuthInWindowBtn");
   
   // State variables
   let currentImageData = null;
@@ -44,6 +51,8 @@
   let currentText = null;           // Current editable text content
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
+  let authFallbackTimerId = null;   // Timer to reveal window fallback if iframe blocked
+  let lastAuthUrl = null;           // Last Hosted UI URL we attempted to load
 
   // Centralized Cognito configuration and URL builders
   const COGNITO_CONFIG = {
@@ -148,6 +157,8 @@
     if (img) img.style.visibility = 'visible';
   }
 
+  // Utility: feature-detect Chrome extension APIs
+
   function isChromeAvailable() {
     try {
       return !!(window.chrome && chrome.runtime && chrome.storage && chrome.storage.local);
@@ -184,6 +195,7 @@
     // Removed custom auth overlay: rely solely on Cognito Hosted UI popup
 
     function tryCloseAuthPopupWindow() {
+      // Legacy fallback window (when iframe embedding is blocked)
       try {
         const possiblePopup = window.open('', 'quotura-auth');
         if (possiblePopup && !possiblePopup.closed) {
@@ -192,13 +204,52 @@
       } catch (_) {}
     }
 
-    // No custom overlay controls or manual popup button
+    // Open the Hosted UI in an in-page modal iframe
+    function openAuthModal(authUrl) {
+      lastAuthUrl = authUrl;
+      if (!authModal || !authIframe) {
+        // If modal not present for some reason, fall back to window popup
+        launchAuthInWindow(authUrl);
+        return;
+      }
+      if (authFallback) authFallback.style.display = 'none';
+      try { authIframe.src = 'about:blank'; } catch (_) {}
+      authModal.classList.add('active');
+      authModal.setAttribute('aria-hidden', 'false');
+      try { authIframe.src = authUrl; } catch (_) { /* ignore */ }
+      if (authFallbackTimerId) clearTimeout(authFallbackTimerId);
+      // Reveal fallback control if iframe cannot be interacted with (common with X-Frame-Options)
+      authFallbackTimerId = setTimeout(() => {
+        if (authFallback) authFallback.style.display = 'flex';
+      }, 1500);
 
-    function startCognitoAuthFlow(action) {
-      const useAction = action === 'signup' ? 'signup' : 'login';
-      const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
+      // If/when iframe navigates back to our extension origin, hide fallback gently
+      if (authIframe) {
+        authIframe.addEventListener('load', () => {
+          try {
+            const href = authIframe.contentWindow && authIframe.contentWindow.location && authIframe.contentWindow.location.href;
+            if (href && typeof href === 'string' && href.indexOf('chrome-extension://') === 0) {
+              if (authFallback) authFallback.style.display = 'none';
+            }
+          } catch (_) {
+            // Cross-origin; ignore
+          }
+        }, { once: false });
+      }
+    }
 
-      // Always use our own named popup for the Hosted UI so it persists across tab/window switches
+    function closeAuthModal() {
+      if (!authModal) return;
+      authModal.classList.remove('active');
+      authModal.setAttribute('aria-hidden', 'true');
+      if (authFallbackTimerId) {
+        clearTimeout(authFallbackTimerId);
+        authFallbackTimerId = null;
+      }
+      try { if (authIframe) authIframe.src = 'about:blank'; } catch (_) {}
+    }
+
+    function launchAuthInWindow(authUrl) {
       let popupRef = null;
       try {
         const w = 520, h = 680;
@@ -206,18 +257,22 @@
         const top = Math.max(0, (window.screen.height - h) / 2);
         popupRef = window.open('about:blank', 'quotura-auth', `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
         if (popupRef && !popupRef.closed) {
-          popupRef.location = fallbackAuthUrl;
+          popupRef.location = authUrl;
           try { popupRef.focus(); } catch (_) {}
         } else {
-          window.open(fallbackAuthUrl, 'quotura-auth');
+          window.open(authUrl, 'quotura-auth');
         }
       } catch (_) {
-        // As a last resort, attempt to open/navigate the named window directly
-        try { window.open(fallbackAuthUrl, 'quotura-auth'); } catch (__) {
-          // If even that fails, fall back to navigating current tab
-          try { window.location.href = fallbackAuthUrl; } catch (___) {}
+        try { window.open(authUrl, 'quotura-auth'); } catch (__) {
+          try { window.location.href = authUrl; } catch (___) {}
         }
       }
+    }
+
+    function startCognitoAuthFlow(action) {
+      const useAction = action === 'signup' ? 'signup' : 'login';
+      const authUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
+      openAuthModal(authUrl);
     }
 
     function getLogoutUrl() {
@@ -285,6 +340,26 @@
       });
     }
 
+    // Auth modal controls
+    if (authCloseBtn) authCloseBtn.addEventListener('click', () => closeAuthModal());
+    if (authBackdrop) authBackdrop.addEventListener('click', () => closeAuthModal());
+    if (openAuthInWindowBtn) openAuthInWindowBtn.addEventListener('click', () => {
+      const urlToOpen = lastAuthUrl || buildCognitoAuthUrl('login', COGNITO_CONFIG);
+      closeAuthModal();
+      launchAuthInWindow(urlToOpen);
+    });
+
+    // Listen for completion signal from auth iframe (when it navigates back to preview.html)
+    try {
+      window.addEventListener('message', (event) => {
+        const data = event && event.data;
+        if (!data || data.type !== 'cognitoAuthComplete') return;
+        setSignedIn(true, data.code);
+        updateAuthUI(true);
+        closeAuthModal();
+      });
+    } catch (_) {}
+
     // Determine current state from URL (?code=...)
     const urlParams = new URLSearchParams(window.location.search);
     const authCode = urlParams.get("code");
@@ -296,17 +371,22 @@
         const cleanUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
       } catch (_) {}
-      // If this page is opened as an auth popup, close it and return focus
+      // If inside the iframe modal, inform parent and stop
+      try {
+        if (window.top !== window.self) {
+          window.parent.postMessage({ type: 'cognitoAuthComplete', code: authCode }, '*');
+          return;
+        }
+      } catch (_) {}
+      // Otherwise, if this page is opened as a separate auth popup window, close it
       try {
         const closeSelf = () => { try { window.close(); } catch (_) {} };
         if (window.opener && !window.opener.closed) {
-          // Give storage listeners a moment to fire
           setTimeout(() => {
             try { window.opener.focus(); } catch (_) {}
             closeSelf();
           }, 100);
         } else {
-          // No opener reference (e.g., stripped by browser); attempt to close anyway
           setTimeout(closeSelf, 100);
         }
       } catch (_) {}
@@ -320,8 +400,11 @@
           if (areaName === 'local' && changes && Object.prototype.hasOwnProperty.call(changes, 'cognitoSignedIn')) {
             const newVal = !!(changes.cognitoSignedIn && changes.cognitoSignedIn.newValue);
             updateAuthUI(newVal);
-            // Only close our named popup after successful sign-in; otherwise keep it open even on tab switches
-            if (newVal) tryCloseAuthPopupWindow();
+            // Close any auth surfaces after successful sign-in
+            if (newVal) {
+              closeAuthModal();
+              tryCloseAuthPopupWindow();
+            }
           }
         });
       }
