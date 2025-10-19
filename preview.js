@@ -53,10 +53,10 @@
     scopes: ["email", "openid"],
   };
 
-  function buildCognitoAuthUrl(action, config) {
+  function buildCognitoAuthUrl(action, config, overrideRedirectUri) {
     const url = new URL(`/${action}`, config.domain);
     url.searchParams.set("client_id", config.clientId);
-    url.searchParams.set("redirect_uri", config.redirectUri);
+    url.searchParams.set("redirect_uri", overrideRedirectUri || config.redirectUri);
     url.searchParams.set("response_type", "code");
     if (Array.isArray(config.scopes) && config.scopes.length > 0) {
       url.searchParams.set("scope", config.scopes.join(" "));
@@ -181,6 +181,106 @@
     const loginUrlString = buildCognitoAuthUrl("login", COGNITO_CONFIG);
     const signupUrlString = buildCognitoAuthUrl("signup", COGNITO_CONFIG);
 
+    // Auth popup overlay elements
+    const authOverlay = document.getElementById("authPopupOverlay");
+    const authOpenExternalBtn = document.getElementById("authPopupOpenExternalBtn");
+    const authCloseBtn = document.getElementById("authPopupCloseBtn");
+    const authStatusTextEl = document.querySelector(".auth-popup-text");
+
+    function showAuthOverlay(message) {
+      try {
+        if (authStatusTextEl && message) authStatusTextEl.textContent = message;
+        if (authOverlay) authOverlay.classList.add('active');
+      } catch (_) {}
+    }
+
+    function hideAuthOverlay() {
+      try {
+        if (authOverlay) authOverlay.classList.remove('active');
+      } catch (_) {}
+    }
+
+    if (authCloseBtn) {
+      authCloseBtn.addEventListener('click', () => hideAuthOverlay());
+    }
+
+    function getIdentityRedirectUri() {
+      try {
+        if (isChromeAvailable() && chrome.runtime && chrome.runtime.id) {
+          return `https://${chrome.runtime.id}.chromiumapp.org/`;
+        }
+      } catch (_) {}
+      return COGNITO_CONFIG.redirectUri;
+    }
+
+    function startCognitoAuthFlow(action) {
+      const useAction = action === 'signup' ? 'signup' : 'login';
+      const identityRedirectUri = getIdentityRedirectUri();
+      const authUrlForIdentity = buildCognitoAuthUrl(useAction, COGNITO_CONFIG, identityRedirectUri);
+      const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
+
+      showAuthOverlay('Opening secure sign-in…');
+
+      // Primary: Chrome Identity API popup (cannot be themed, but keeps user on page)
+      if (isChromeAvailable() && chrome.identity && chrome.identity.launchWebAuthFlow) {
+        try {
+          chrome.identity.launchWebAuthFlow({ url: authUrlForIdentity, interactive: true }, (responseUrl) => {
+            if (chrome.runtime && chrome.runtime.lastError) {
+              // Show themed overlay with manual popup fallback
+              if (authOpenExternalBtn) {
+                authOpenExternalBtn.style.display = 'inline-block';
+                authOpenExternalBtn.onclick = () => {
+                  try {
+                    const w = 520, h = 680;
+                    const left = Math.max(0, (window.screen.width - w) / 2);
+                    const top = Math.max(0, (window.screen.height - h) / 2);
+                    window.open(fallbackAuthUrl, 'quotura-auth', `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+                  } catch (_) {
+                    window.location.href = fallbackAuthUrl;
+                  }
+                };
+              }
+              if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+              return;
+            }
+            if (typeof responseUrl === 'string' && responseUrl.includes('?')) {
+              try {
+                const parsed = new URL(responseUrl);
+                const code = parsed.searchParams.get('code');
+                if (code) {
+                  setSignedIn(true, code);
+                  updateAuthUI(true);
+                  hideAuthOverlay();
+                  showNotification('Signed in successfully!', 'success');
+                  return;
+                }
+              } catch (_) {}
+            }
+            if (authStatusTextEl) authStatusTextEl.textContent = 'Sign-in was cancelled or did not complete.';
+          });
+          return;
+        } catch (_) {
+          // Fall through to manual popup
+        }
+      }
+
+      // Fallback: Open a centered popup window with Cognito Hosted UI
+      if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block';
+      if (authOpenExternalBtn) {
+        authOpenExternalBtn.onclick = () => {
+          try {
+            const w = 520, h = 680;
+            const left = Math.max(0, (window.screen.width - w) / 2);
+            const top = Math.max(0, (window.screen.height - h) / 2);
+            window.open(fallbackAuthUrl, 'quotura-auth', `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+          } catch (_) {
+            window.location.href = fallbackAuthUrl;
+          }
+        };
+      }
+      if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+    }
+
     function getLogoutUrl() {
       return buildCognitoLogoutUrl(COGNITO_CONFIG);
     }
@@ -228,12 +328,12 @@
     // Wire up buttons
     if (loginBtn) {
       loginBtn.addEventListener("click", () => {
-        window.location.href = loginUrlString;
+        startCognitoAuthFlow('login');
       });
     }
     if (signupBtn) {
       signupBtn.addEventListener("click", () => {
-        window.location.href = signupUrlString;
+        startCognitoAuthFlow('signup');
       });
     }
     if (logoutBtn) {
@@ -258,6 +358,19 @@
       } catch (_) {}
       return;
     }
+
+    // Listen for sign-in state changes (e.g., from popup flow)
+    try {
+      if (isChromeAvailable() && chrome.storage && chrome.storage.onChanged) {
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+          if (areaName === 'local' && changes && Object.prototype.hasOwnProperty.call(changes, 'cognitoSignedIn')) {
+            const newVal = !!(changes.cognitoSignedIn && changes.cognitoSignedIn.newValue);
+            updateAuthUI(newVal);
+            if (newVal) hideAuthOverlay();
+          }
+        });
+      }
+    } catch (_) {}
 
     // Otherwise, restore last-known state
     getSignedIn(updateAuthUI);
