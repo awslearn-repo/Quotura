@@ -203,11 +203,11 @@
         children.forEach((el) => {
           if (el === authOverlay) return;
           if (enable) {
-            // Use inert to disable interaction and hide from AT without
-            // triggering aria-hidden-on-focused-descendant issues
             el.setAttribute('inert', '');
+            el.setAttribute('aria-hidden', 'true');
           } else {
             el.removeAttribute('inert');
+            el.removeAttribute('aria-hidden');
           }
         });
       } catch (_) {}
@@ -256,16 +256,13 @@
 
     function hideAuthOverlay() {
       try {
-        // First re-enable the page so focus can move outside the overlay
-        setPageInertExceptOverlay(false);
-
-        // Now move focus OUT of the overlay BEFORE setting aria-hidden
+        // Move focus OUT of the overlay BEFORE setting aria-hidden to avoid AOM blocking
         if (
           previouslyFocusedElement &&
           document.contains(previouslyFocusedElement) &&
           typeof previouslyFocusedElement.focus === 'function'
         ) {
-          try { previouslyFocusedElement.focus(); } catch (_) {}
+          previouslyFocusedElement.focus();
         } else {
           // Fallback to a safe focus target not inside the overlay
           const fallbackTargets = [loginBtn, signupBtn, logoutBtn, document.getElementById('message')];
@@ -290,6 +287,7 @@
           authOverlay.classList.remove('active');
           // Only now hide from assistive tech
           authOverlay.setAttribute('aria-hidden', 'true');
+          setPageInertExceptOverlay(false);
         }
         previouslyFocusedElement = null;
       } catch (_) {}
