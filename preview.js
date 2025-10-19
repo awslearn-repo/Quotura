@@ -32,6 +32,7 @@
   const loginBtn = document.getElementById("loginBtn");
   const signupBtn = document.getElementById("signupBtn");
   const logoutBtn = document.getElementById("logoutBtn");
+  const resumeAuthBtn = document.getElementById("resumeAuthBtn");
   const authStatus = document.getElementById("authStatus");
   
   // State variables
@@ -187,6 +188,7 @@
     const authCloseBtn = document.getElementById("authPopupCloseBtn");
     const authStatusTextEl = document.querySelector(".auth-popup-text");
     let previouslyFocusedElement = null;
+    let pendingAuthFlow = null; // 'login' | 'signup' | null
 
     function tryCloseAuthPopupWindow() {
       try {
@@ -312,6 +314,7 @@
 
     function startCognitoAuthFlow(action) {
       const useAction = action === 'signup' ? 'signup' : 'login';
+      pendingAuthFlow = useAction;
       const identityRedirectUri = getIdentityRedirectUri();
       const authUrlForIdentity = buildCognitoAuthUrl(useAction, COGNITO_CONFIG, identityRedirectUri);
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
@@ -347,6 +350,7 @@
                 window.location.href = fallbackAuthUrl;
               }
               if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+              try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
               // Reveal manual open button in case popup was blocked or needs user action
               try { if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
               return;
@@ -364,6 +368,7 @@
                   try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
                   // Also try to close any named popup if browsers reused it
                   tryCloseAuthPopupWindow();
+                  try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
                   return;
                 }
               } catch (_) {}
@@ -389,6 +394,7 @@
         window.location.href = fallbackAuthUrl;
       }
       if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+      try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
     }
 
     function getLogoutUrl() {
@@ -427,11 +433,21 @@
         loginBtn.style.display = "none";
         signupBtn.style.display = "none";
         logoutBtn.style.display = "inline-block";
+        if (resumeAuthBtn) resumeAuthBtn.style.display = 'none';
       } else {
         authStatus.textContent = "You are not signed in.";
         loginBtn.style.display = "inline-block";
         signupBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
+        if (resumeAuthBtn) {
+          try {
+            chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
+              const shouldShow = !!(data && data.pendingAuthFlow && data.pendingAuthVisible);
+              resumeAuthBtn.style.display = shouldShow ? 'inline-block' : 'none';
+              resumeAuthBtn.textContent = data && data.pendingAuthFlow === 'signup' ? '🔁 Resume sign-up' : '🔁 Resume sign-in';
+            });
+          } catch (_) {}
+        }
       }
     }
 
@@ -444,6 +460,18 @@
     if (signupBtn) {
       signupBtn.addEventListener("click", () => {
         startCognitoAuthFlow('signup');
+      });
+    }
+    if (resumeAuthBtn) {
+      resumeAuthBtn.addEventListener('click', () => {
+        if (isChromeAvailable()) {
+          chrome.storage.local.get(['pendingAuthFlow'], (data) => {
+            const flow = (data && data.pendingAuthFlow) || 'login';
+            startCognitoAuthFlow(flow);
+          });
+        } else {
+          startCognitoAuthFlow('login');
+        }
       });
     }
     if (logoutBtn) {
@@ -493,14 +521,31 @@
             if (newVal) {
               hideAuthOverlay();
               tryCloseAuthPopupWindow();
+              try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
             }
           }
         });
       }
     } catch (_) {}
 
-    // Otherwise, restore last-known state
-    getSignedIn(updateAuthUI);
+    // Otherwise, restore last-known state and pending overlay if any
+    getSignedIn((signedIn) => {
+      updateAuthUI(signedIn);
+      if (!signedIn) {
+        try {
+          chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
+            if (data && data.pendingAuthFlow && data.pendingAuthVisible) {
+              const text = data.pendingAuthFlow === 'signup' ? 'Please complete sign-up in the popup…' : 'Please complete sign-in in the popup…';
+              showAuthOverlay(text);
+              if (resumeAuthBtn) {
+                resumeAuthBtn.style.display = 'inline-block';
+                resumeAuthBtn.textContent = data.pendingAuthFlow === 'signup' ? '🔁 Resume sign-up' : '🔁 Resume sign-in';
+              }
+            }
+          });
+        } catch (_) {}
+      }
+    });
   }
   
   /**
