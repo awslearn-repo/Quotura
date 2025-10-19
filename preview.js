@@ -219,26 +219,35 @@
       const authUrlForIdentity = buildCognitoAuthUrl(useAction, COGNITO_CONFIG, identityRedirectUri);
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
 
+      // Optional: brief status overlay while the popup opens
       showAuthOverlay('Opening secure sign-in…');
 
-      // Primary: Chrome Identity API popup (cannot be themed, but keeps user on page)
+      // Open a placeholder popup synchronously to avoid popup blockers
+      let popupRef = null;
+      try {
+        const w = 520, h = 680;
+        const left = Math.max(0, (window.screen.width - w) / 2);
+        const top = Math.max(0, (window.screen.height - h) / 2);
+        popupRef = window.open('about:blank', 'quotura-auth', `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+      } catch (_) {
+        // If blocked, fallback to full-page redirect as last resort
+      }
+
+      // If Chrome Identity API is available, prefer it (it will auto-close)
       if (isChromeAvailable() && chrome.identity && chrome.identity.launchWebAuthFlow) {
         try {
           chrome.identity.launchWebAuthFlow({ url: authUrlForIdentity, interactive: true }, (responseUrl) => {
             if (chrome.runtime && chrome.runtime.lastError) {
-              // Show themed overlay with manual popup fallback
-              if (authOpenExternalBtn) {
-                authOpenExternalBtn.style.display = 'inline-block';
-                authOpenExternalBtn.onclick = () => {
-                  try {
-                    const w = 520, h = 680;
-                    const left = Math.max(0, (window.screen.width - w) / 2);
-                    const top = Math.max(0, (window.screen.height - h) / 2);
-                    window.open(fallbackAuthUrl, 'quotura-auth', `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
-                  } catch (_) {
-                    window.location.href = fallbackAuthUrl;
-                  }
-                };
+              // Identity failed; use our already-open popup
+              try {
+                if (popupRef && !popupRef.closed) {
+                  popupRef.location = fallbackAuthUrl;
+                } else {
+                  // If popup was blocked/closed, navigate current page as a last resort
+                  window.open(fallbackAuthUrl, 'quotura-auth');
+                }
+              } catch (_) {
+                window.location.href = fallbackAuthUrl;
               }
               if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
               return;
@@ -252,31 +261,31 @@
                   updateAuthUI(true);
                   hideAuthOverlay();
                   showNotification('Signed in successfully!', 'success');
+                  // Close placeholder popup if we opened one
+                  try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
                   return;
                 }
               } catch (_) {}
             }
             if (authStatusTextEl) authStatusTextEl.textContent = 'Sign-in was cancelled or did not complete.';
+            // Close placeholder if nothing happened
+            try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
           });
           return;
         } catch (_) {
-          // Fall through to manual popup
+          // Fall back to manual popup if identity throws synchronously
         }
       }
 
-      // Fallback: Open a centered popup window with Cognito Hosted UI
-      if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block';
-      if (authOpenExternalBtn) {
-        authOpenExternalBtn.onclick = () => {
-          try {
-            const w = 520, h = 680;
-            const left = Math.max(0, (window.screen.width - w) / 2);
-            const top = Math.max(0, (window.screen.height - h) / 2);
-            window.open(fallbackAuthUrl, 'quotura-auth', `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
-          } catch (_) {
-            window.location.href = fallbackAuthUrl;
-          }
-        };
+      // Identity API not available; navigate our already-open popup immediately
+      try {
+        if (popupRef && !popupRef.closed) {
+          popupRef.location = fallbackAuthUrl;
+        } else {
+          window.open(fallbackAuthUrl, 'quotura-auth');
+        }
+      } catch (_) {
+        window.location.href = fallbackAuthUrl;
       }
       if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
     }
@@ -355,6 +364,16 @@
       try {
         const cleanUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
+      } catch (_) {}
+      // If this page is opened as an auth popup, close it and return focus
+      try {
+        if (window.opener && !window.opener.closed) {
+          // Give storage listeners a moment to fire
+          setTimeout(() => {
+            try { window.opener.focus(); } catch (_) {}
+            window.close();
+          }, 100);
+        }
       } catch (_) {}
       return;
     }
