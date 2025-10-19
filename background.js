@@ -533,6 +533,261 @@ function generateQuoteImageDataWithSettings(text, selectedGradient, includeWater
 }
 
 /**
+ * Minimal HTML parser for B/I/U tags to styled tokens
+ * Supported tags: <b>, <strong>, <i>, <em>, <u>, <br>, <p>, <div>
+ * Returns a flat list of tokens with style flags and explicit newline tokens
+ */
+function parseSimpleHtmlToTokens(htmlString) {
+  const tokens = [];
+  const src = String(htmlString || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/&nbsp;/gi, ' ');
+
+  let i = 0;
+  let bold = false;
+  let italic = false;
+  let underline = false;
+
+  function pushText(text) {
+    if (!text) return;
+    // Split on newlines to create explicit newline tokens
+    const parts = String(text).split('\n');
+    parts.forEach((part, idx) => {
+      if (part.length > 0) {
+        tokens.push({ text: part, bold, italic, underline, isNewline: false });
+      }
+      if (idx < parts.length - 1) {
+        tokens.push({ text: '\n', bold: false, italic: false, underline: false, isNewline: true });
+      }
+    });
+  }
+
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === '<') {
+      const closeIdx = src.indexOf('>', i + 1);
+      if (closeIdx === -1) {
+        // Malformed, treat rest as text
+        pushText(src.slice(i));
+        break;
+      }
+      const rawTag = src.slice(i + 1, closeIdx).trim();
+      const tag = rawTag.toLowerCase();
+      // Advance past tag
+      i = closeIdx + 1;
+
+      // Normalize tag name (ignore attributes)
+      const m = tag.match(/^\/?([a-z0-9]+)/);
+      const name = m ? m[1] : '';
+      const isClosing = tag.startsWith('/');
+
+      if (name === 'b' || name === 'strong') {
+        bold = !isClosing ? true : false;
+        continue;
+      }
+      if (name === 'i' || name === 'em') {
+        italic = !isClosing ? true : false;
+        continue;
+      }
+      if (name === 'u') {
+        underline = !isClosing ? true : false;
+        continue;
+      }
+      if (name === 'br') {
+        tokens.push({ text: '\n', bold: false, italic: false, underline: false, isNewline: true });
+        continue;
+      }
+      if (name === 'p' || name === 'div') {
+        // Treat block boundaries as line breaks
+        tokens.push({ text: '\n', bold: false, italic: false, underline: false, isNewline: true });
+        continue;
+      }
+      // Other tags are ignored
+    } else {
+      // Read until next tag
+      const nextTag = src.indexOf('<', i);
+      const text = nextTag === -1 ? src.slice(i) : src.slice(i, nextTag);
+      pushText(text);
+      i = nextTag === -1 ? src.length : nextTag;
+    }
+  }
+
+  return tokens;
+}
+
+function computeFontStringForToken(token, fontFamily, fontSize) {
+  const parts = [];
+  if (token && token.italic) parts.push('italic');
+  if (token && token.bold) parts.push('bold');
+  parts.push(`${fontSize}px`);
+  parts.push(fontFamily);
+  return parts.join(' ');
+}
+
+function layoutTokensToLines(ctx, tokens, maxWidth, fontFamily, fontSize) {
+  const lines = [];
+  let currentLine = [];
+  let currentWidth = 0;
+
+  function commitLine() {
+    lines.push({ tokens: currentLine, width: currentWidth });
+    currentLine = [];
+    currentWidth = 0;
+  }
+
+  // Split text tokens into smaller tokens by spaces to improve wrapping
+  function splitTokenBySpace(token) {
+    const parts = token.text.split(/(\s+)/);
+    return parts
+      .filter((p) => p.length > 0)
+      .map((p) => ({ text: p, bold: token.bold, italic: token.italic, underline: token.underline, isNewline: false }));
+  }
+
+  for (const tok of tokens) {
+    if (tok.isNewline) {
+      commitLine();
+      continue;
+    }
+    const subTokens = splitTokenBySpace(tok);
+    for (const st of subTokens) {
+      ctx.font = computeFontStringForToken(st, fontFamily, fontSize);
+      const w = ctx.measureText(st.text).width;
+      if (currentWidth + w > maxWidth && currentLine.length > 0) {
+        commitLine();
+      }
+      st._width = w;
+      currentLine.push(st);
+      currentWidth += w;
+    }
+  }
+  // Push the last line if any content exists
+  if (currentLine.length > 0 || lines.length === 0) {
+    commitLine();
+  }
+  return lines;
+}
+
+function drawFormattedLines(ctx, lines, centerX, startY, lineHeight, fontFamily, fontSize, textColor) {
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = textColor;
+  const underlineThickness = Math.max(1, Math.round(fontSize / 16));
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const y = startY + i * lineHeight;
+    const xStart = centerX - (line.width || 0) / 2;
+    let x = xStart;
+    for (const tok of line.tokens) {
+      ctx.font = computeFontStringForToken(tok, fontFamily, fontSize);
+      ctx.fillStyle = textColor;
+      ctx.fillText(tok.text, x, y);
+      if (tok.underline && tok.text.trim().length > 0) {
+        ctx.strokeStyle = textColor;
+        ctx.lineWidth = underlineThickness;
+        ctx.beginPath();
+        // approximate underline position relative to middle baseline
+        const underlineY = y + Math.round(fontSize * 0.45);
+        ctx.moveTo(x, underlineY);
+        ctx.lineTo(x + (tok._width || ctx.measureText(tok.text).width), underlineY);
+        ctx.stroke();
+      }
+      x += tok._width || ctx.measureText(tok.text).width;
+    }
+  }
+}
+
+/**
+ * Generate quote image using gradient background and formatted HTML (B/I/U)
+ */
+function generateQuoteImageDataWithSettingsHtml(html, selectedGradient, includeWatermark = true, font = 'Arial', fontSize = 28) {
+  return new Promise((resolve) => {
+    const canvas = new OffscreenCanvas(800, 400);
+    const ctx = canvas.getContext('2d');
+
+    // Resolve gradient (use selected or random like text version)
+    let finalGradient;
+    if (selectedGradient) {
+      finalGradient = selectedGradient;
+    } else {
+      const gradients = [
+        ['#4facfe', '#00f2fe'],
+        ['#43e97b', '#38f9d7'],
+        ['#fa709a', '#fee140'],
+        ['#30cfd0', '#330867'],
+        ['#ff9a9e', '#fad0c4'],
+        ['#a1c4fd', '#c2e9fb'],
+        ['#667eea', '#764ba2'],
+        ['#fddb92', '#d1fdff'],
+      ];
+      finalGradient = gradients[Math.floor(Math.random() * gradients.length)];
+      try { chrome.storage.local.set({ currentGradient: finalGradient }); } catch (_) {}
+    }
+
+    const gradient = ctx.createLinearGradient(0, 0, 800, 400);
+    gradient.addColorStop(0, finalGradient[0]);
+    gradient.addColorStop(1, finalGradient[1]);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 800, 400);
+
+    const brightness = getBrightness(finalGradient[0]);
+    const textColor = brightness > 200 ? '#000000' : '#ffffff';
+
+    // Layout and draw formatted content
+    const tokens = parseSimpleHtmlToTokens(html);
+    const lines = layoutTokensToLines(ctx, tokens, 720, font, fontSize);
+    const lineHeight = Math.round(fontSize * 1.3);
+    const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+    drawFormattedLines(ctx, lines, 400, startY, lineHeight, font, fontSize, textColor);
+
+    if (includeWatermark) {
+      addWatermark(ctx, canvas.width, canvas.height, finalGradient);
+    }
+
+    canvas.convertToBlob().then((blob) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+  });
+}
+
+/**
+ * Generate quote image using custom image background and formatted HTML (B/I/U)
+ */
+function generateQuoteImageDataWithImageHtml(html, imageDataUrl, includeWatermark = true, font = 'Arial', fontSize = 28) {
+  return new Promise(async (resolve) => {
+    try {
+      const canvas = new OffscreenCanvas(800, 400);
+      const ctx = canvas.getContext('2d');
+      const bitmap = await loadImageBitmapFromDataUrl(imageDataUrl);
+      drawImageCover(ctx, bitmap, canvas.width, canvas.height);
+
+      const avgBrightness = await computeAverageBrightnessFromImageBitmap(bitmap);
+      const textColor = pickTextColorFromBrightness(avgBrightness);
+
+      const tokens = parseSimpleHtmlToTokens(html);
+      const lines = layoutTokensToLines(ctx, tokens, 720, font, fontSize);
+      const lineHeight = Math.round(fontSize * 1.3);
+      const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+      drawFormattedLines(ctx, lines, 400, startY, lineHeight, font, fontSize, textColor);
+
+      if (includeWatermark) {
+        addWatermarkForBrightness(ctx, canvas.width, canvas.height, avgBrightness);
+      }
+
+      const blob = await canvas.convertToBlob();
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    } catch (e) {
+      // Fallback to non-HTML version if anything fails
+      generateQuoteImageDataWithSettings(html, null, includeWatermark, font, fontSize).then(resolve);
+    }
+  });
+}
+
+/**
  * Generate quote image data with a specific gradient (maintains color consistency)
  * @param {string} text - The selected text to beautify
  * @param {Array} selectedGradient - The gradient colors to use
@@ -770,19 +1025,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   if (request.action === "regenerateWithSettings") {
     chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
+      const incomingHtml = (request && typeof request.html === 'string' && request.html.trim().length > 0) ? request.html : null;
       if (data.customBackgroundImage) {
-        generateQuoteImageDataWithImage(request.text, data.customBackgroundImage, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+        const generator = incomingHtml ? generateQuoteImageDataWithImageHtml : generateQuoteImageDataWithImage;
+        generator(incomingHtml || request.text, data.customBackgroundImage, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
         });
       } else if (data.currentGradient) {
-        generateQuoteImageDataWithSettings(request.text, data.currentGradient, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+        const generator = incomingHtml ? generateQuoteImageDataWithSettingsHtml : generateQuoteImageDataWithSettings;
+        generator(incomingHtml || request.text, data.currentGradient, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
         });
       } else {
         // Fallback: regenerate with new gradient if currentGradient is missing
-        generateQuoteImageDataWithSettings(request.text, null, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+        const generator = incomingHtml ? generateQuoteImageDataWithSettingsHtml : generateQuoteImageDataWithSettings;
+        generator(incomingHtml || request.text, null, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
         });

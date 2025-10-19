@@ -738,11 +738,12 @@
     setButtonLoading(removeWatermarkBtn, true);
     
     // Use current font and size settings when removing watermark
-    chrome.storage.local.get(["quoteText"], (data) => {
+    chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
       if (data.quoteText) {
         chrome.runtime.sendMessage({
           action: "regenerateWithSettings",
           text: data.quoteText,
+          html: (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null,
           font: currentFont,
           fontSize: currentFontSize,
           includeWatermark: false
@@ -913,6 +914,7 @@
     chrome.runtime.sendMessage({
       action: "regenerateWithSettings",
       text: textValue,
+      html: (typeof currentTextHtml === 'string' && currentTextHtml.length > 0) ? currentTextHtml : null,
       font: currentFont,
       fontSize: currentFontSize,
       includeWatermark: !watermarkRemoved,
@@ -1349,7 +1351,7 @@
       msg.textContent = "Settings updated (preview only)";
       return;
     }
-    chrome.storage.local.get(["quoteText"], (data) => {
+    chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
       if (data.quoteText) {
         msg.textContent = "Updating with new settings...";
         disableExportButtons();
@@ -1357,6 +1359,7 @@
         chrome.runtime.sendMessage({
           action: "regenerateWithSettings",
           text: data.quoteText,
+          html: (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null,
           font: currentFont,
           fontSize: currentFontSize,
           includeWatermark: !watermarkRemoved,
