@@ -20,10 +20,7 @@
   const currentSizeDisplay = document.getElementById("currentSize");        // Current size display
   const doneBtn = document.getElementById("doneBtn");                       // Done button
   const backgroundBtn = document.getElementById("backgroundBtn");           // Background selection button
-  const editTextBtn = document.getElementById("editTextBtn");               // Edit text button
   const inlineEditor = document.getElementById("inlineEditor");             // Inline editor overlay
-  const inlineDoneContainer = document.getElementById("inlineDoneContainer"); // Inline Done container
-  const inlineDoneBtn = document.getElementById("inlineDoneBtn");             // Inline Done button
   const editBackground = document.getElementById("editBackground");          // Background layer during editing
   const boldBtn = document.getElementById("boldBtn");                         // Bold formatting button
   const italicBtn = document.getElementById("italicBtn");                     // Italic formatting button
@@ -868,20 +865,24 @@
    * Handle Quick Edit button click - shows edit panel
    */
   function handleQuickEdit() {
+    // Ensure right panel is visible
     if (!editMode) {
-      // Enter edit mode - show panel
       editMode = true;
       editPanel.classList.add("active");
       if (quickEditBtn) quickEditBtn.style.opacity = "0.7";
+    }
+    // Also open the inline editor for immediate text editing
+    if (!inlineEditing) {
+      openInlineEditor();
+    } else {
+      try { inlineEditor.focus(); } catch (_) {}
     }
   }
 
   /**
    * Open inline editor overlay for editing quote content with live preview
    */
-  function handleEditText() {
-    openInlineEditor();
-  }
+  // Removed explicit Edit Text button; clicking the image opens editor
 
   // Simple HTML escape for initial textarea content
   function escapeHtml(str) {
@@ -1010,7 +1011,6 @@
         syncInlineEditorStyles();
         inlineEditing = true;
         inlineEditor.classList.add('active');
-        if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
         showEditingVisuals();
         placeCaretAtEnd(inlineEditor);
       inlineEditor.focus();
@@ -1022,7 +1022,6 @@
       syncInlineEditorStyles();
       inlineEditing = true;
       inlineEditor.classList.add('active');
-      if (inlineDoneContainer) inlineDoneContainer.style.display = 'block';
       showEditingVisuals();
       placeCaretAtEnd(inlineEditor);
     inlineEditor.focus();
@@ -1034,7 +1033,7 @@
     inlineEditing = false;
     inlineEditor.classList.remove('active');
     inlineEditor.blur();
-    if (inlineDoneContainer) inlineDoneContainer.style.display = 'none';
+    // no separate inline done UI anymore
     hideEditingVisuals();
   }
   
@@ -1409,8 +1408,6 @@
   decreaseSizeBtn.addEventListener("click", () => handleSizeChange(-2));
   increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
   doneBtn.addEventListener("click", handleDone);
-  editTextBtn.addEventListener("click", handleEditText);
-  if (inlineDoneBtn) inlineDoneBtn.addEventListener('click', handleDone);
   
   // Open quick edit panel when image is clicked
   img.addEventListener("click", handleQuickEdit);
