@@ -1244,7 +1244,75 @@
         color: #666;
       }
 
-      /* (Removed) Custom auth overlay styles: no longer used */
+      /* Themed Auth Popup Overlay */
+      .auth-popup-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10000;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .auth-popup-overlay.active { opacity: 1; visibility: visible; }
+      .auth-popup-backdrop {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(8px);
+      }
+      .auth-popup-container {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.95);
+        width: 90%;
+        max-width: 520px;
+        border-radius: 20px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      }
+      .auth-popup-overlay.active .auth-popup-container { transform: translate(-50%, -50%) scale(1); }
+      .auth-popup-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 18px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #fff;
+      }
+      .auth-popup-header h3 { margin: 0; font-size: 18px; font-weight: 700; }
+      .auth-popup-body {
+        padding: 20px 22px 24px;
+        background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08));
+      }
+      .auth-popup-text {
+        color: #fff;
+        text-align: center;
+        font-weight: 600;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        margin-top: 12px;
+      }
+      .auth-popup-actions {
+        margin-top: 18px;
+        display: flex;
+        justify-content: center;
+      }
+      .auth-popup-spinner {
+        width: 42px;
+        height: 42px;
+        border: 3px solid rgba(255,255,255,0.35);
+        border-top-color: #fff;
+        border-radius: 50%;
+        margin: 0 auto;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
 
       /* Auth bar styling (Cognito login/signup/signout) */
       .auth-container {
@@ -1370,7 +1438,23 @@
       <button id="removeWatermarkBtn" class="export-btn btn-warning">🚫 Remove Watermark</button>
     </div>
 
-    <!-- Custom auth overlay removed: Cognito Hosted UI handles its own popup -->
+    <!-- Themed Auth Popup Overlay (used for Login/Signup flows) -->
+    <div id="authPopupOverlay" class="auth-popup-overlay" aria-hidden="true">
+      <div class="auth-popup-backdrop"></div>
+      <div class="auth-popup-container" role="dialog" aria-modal="true" aria-labelledby="authPopupTitle" tabindex="-1">
+        <div class="auth-popup-header">
+          <h3 id="authPopupTitle">Quotura Sign in</h3>
+          <button id="authPopupCloseBtn" class="close-btn" aria-label="Close">✕</button>
+        </div>
+        <div class="auth-popup-body">
+          <div class="auth-popup-spinner" aria-hidden="true"></div>
+          <div class="auth-popup-text">Opening secure sign-in…</div>
+          <div class="auth-popup-actions">
+            <button id="authPopupOpenExternalBtn" class="export-btn btn-secondary" style="display:none;">Open sign-in popup</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- External JS file to comply with CSP (Content Security Policy) -->
     <!-- Inline scripts are not allowed in Chrome extensions for security -->
