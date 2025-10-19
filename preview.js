@@ -304,35 +304,6 @@
       } catch (_) {}
     }
 
-    function handleAuthCancelled() {
-      try {
-        // Clear any persisted pending flags and hide overlay immediately
-        try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
-        pendingAuthFlow = null;
-        hideAuthOverlay();
-        tryCloseAuthPopupWindow();
-        if (resumeAuthBtn) {
-          try { resumeAuthBtn.style.display = 'none'; } catch (_) {}
-        }
-        // Optional gentle notice without blocking the UI
-        try { showNotification('Sign-in was cancelled.', 'info'); } catch (_) {}
-      } catch (_) {}
-    }
-
-    function startPopupCloseWatcher(popupRef) {
-      try {
-        const watchId = setInterval(() => {
-          try {
-            if (!pendingAuthFlow) { clearInterval(watchId); return; }
-            if (popupRef && popupRef.closed) {
-              clearInterval(watchId);
-              handleAuthCancelled();
-            }
-          } catch (_) {}
-        }, 500);
-      } catch (_) {}
-    }
-
     if (authCloseBtn) {
       authCloseBtn.addEventListener('click', () => {
         // Do not allow closing while an auth flow is pending
@@ -356,6 +327,7 @@
     function startCognitoAuthFlow(action) {
       const useAction = action === 'signup' ? 'signup' : 'login';
       pendingAuthFlow = useAction;
+      try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
       const identityRedirectUri = getIdentityRedirectUri();
       const authUrlForIdentity = buildCognitoAuthUrl(useAction, COGNITO_CONFIG, identityRedirectUri);
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
@@ -384,14 +356,14 @@
                 if (popupRef && !popupRef.closed) {
                   popupRef.location = fallbackAuthUrl;
                 } else {
-                  // If popup was blocked/closed, open a new one
-                  popupRef = window.open(fallbackAuthUrl, 'quotura-auth');
+                  // If popup was blocked/closed, navigate current page as a last resort
+                  window.open(fallbackAuthUrl, 'quotura-auth');
                 }
               } catch (_) {
                 window.location.href = fallbackAuthUrl;
               }
-              // Watch for user closing the manual popup to treat as cancellation
-              try { if (popupRef) startPopupCloseWatcher(popupRef); } catch (_) {}
+              if (authStatusTextEl) authStatusTextEl.textContent = (pendingAuthFlow === 'signup') ? 'Signing up…' : 'Signing in…';
+              try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
               // Reveal manual open button in case popup was blocked or needs user action
               try { if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
               return;
@@ -415,8 +387,12 @@
                 }
               } catch (_) {}
             }
-            // Treat as cancellation: hide overlay and return to preview immediately
-            handleAuthCancelled();
+            if (authStatusTextEl) authStatusTextEl.textContent = 'Sign-in was cancelled or did not complete.';
+            // Allow user to close the overlay after cancellation
+            pendingAuthFlow = null;
+            if (authCloseBtn) {
+              try { authCloseBtn.style.display = ''; } catch (_) {}
+            }
             // Close placeholder if nothing happened
             try { if (popupRef && !popupRef.closed) popupRef.close(); } catch (_) {}
           });
@@ -431,13 +407,13 @@
         if (popupRef && !popupRef.closed) {
           popupRef.location = fallbackAuthUrl;
         } else {
-          popupRef = window.open(fallbackAuthUrl, 'quotura-auth');
+          window.open(fallbackAuthUrl, 'quotura-auth');
         }
       } catch (_) {
         window.location.href = fallbackAuthUrl;
       }
-      // Watch for manual popup closure to detect cancellation
-      try { if (popupRef) startPopupCloseWatcher(popupRef); } catch (_) {}
+      if (authStatusTextEl) authStatusTextEl.textContent = (pendingAuthFlow === 'signup') ? 'Signing up…' : 'Signing in…';
+      try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
     }
 
     function getLogoutUrl() {
@@ -576,9 +552,21 @@
     getSignedIn((signedIn) => {
       updateAuthUI(signedIn);
       if (!signedIn) {
-        // Ensure no intermediate auth overlay is restored or shown on reload
-        try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
-        hideAuthOverlay();
+        try {
+          chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
+            if (data && data.pendingAuthFlow && data.pendingAuthVisible) {
+              // Keep overlay visible with neutral, non-instructional text
+              const text = data.pendingAuthFlow === 'signup' ? 'Signing up…' : 'Signing in…';
+              // Sync in-memory state so close guard works after reload
+              pendingAuthFlow = data.pendingAuthFlow;
+              showAuthOverlay(text);
+              if (resumeAuthBtn) {
+                resumeAuthBtn.style.display = 'inline-block';
+                resumeAuthBtn.textContent = data.pendingAuthFlow === 'signup' ? '🔁 Resume sign-up' : '🔁 Resume sign-in';
+              }
+            }
+          });
+        } catch (_) {}
       }
     });
   }
