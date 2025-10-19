@@ -1274,6 +1274,91 @@
         flex-wrap: wrap;
         justify-content: center;
       }
+
+      /* Auth modal (in-page popup) */
+      .auth-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10000;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .auth-modal.active {
+        opacity: 1;
+        visibility: visible;
+      }
+      .auth-modal-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(8px);
+      }
+      .auth-modal-container {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.98);
+        width: 95vw;
+        max-width: 560px;
+        height: 85vh;
+        max-height: 760px;
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        overflow: hidden;
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .auth-modal.active .auth-modal-container {
+        transform: translate(-50%, -50%) scale(1);
+      }
+      .auth-close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 2;
+        background: rgba(0,0,0,0.6);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s ease;
+      }
+      .auth-close-btn:hover {
+        background: rgba(0,0,0,0.75);
+      }
+      #authIframe {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #fff;
+      }
+      .auth-fallback {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: #ffffff;
+        padding: 24px;
+        text-align: center;
+      }
     </style>
   </head>
   <body>
@@ -1371,6 +1456,30 @@
     </div>
 
     <!-- Custom auth overlay removed: Cognito Hosted UI handles its own popup -->
+
+    <!-- In-page auth modal (iframe-based Hosted UI) -->
+    <div id="authModal" class="auth-modal" aria-hidden="true">
+      <div class="auth-modal-backdrop" id="authBackdrop"></div>
+      <div class="auth-modal-container" role="dialog" aria-modal="true" aria-label="Authenticate">
+        <button id="authCloseBtn" class="auth-close-btn" aria-label="Close">✕</button>
+        <iframe
+          id="authIframe"
+          title="Cognito Authentication"
+          sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+          referrerpolicy="no-referrer"
+          src="about:blank"
+        ></iframe>
+        <div id="authFallback" class="auth-fallback" style="display:none;">
+          <div style="max-width: 420px; color:#333;">
+            <h3 style="margin:0 0 8px 0;">Open sign-in in a new window</h3>
+            <p style="margin:0 0 16px 0;">
+              We couldn't display the Cognito Hosted UI here. Some identity providers block being shown inside an embedded view. You can continue in a small window instead.
+            </p>
+          </div>
+          <button id="openAuthInWindowBtn" class="export-btn btn-secondary">Open in new window</button>
+        </div>
+      </div>
+    </div>
 
     <!-- External JS file to comply with CSP (Content Security Policy) -->
     <!-- Inline scripts are not allowed in Chrome extensions for security -->
