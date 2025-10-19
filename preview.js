@@ -186,17 +186,66 @@
     const authOpenExternalBtn = document.getElementById("authPopupOpenExternalBtn");
     const authCloseBtn = document.getElementById("authPopupCloseBtn");
     const authStatusTextEl = document.querySelector(".auth-popup-text");
+    let previouslyFocusedElement = null;
+
+    function setPageInertExceptOverlay(enable) {
+      try {
+        if (!authOverlay) return;
+        const children = Array.from(document.body.children);
+        children.forEach((el) => {
+          if (el === authOverlay) return;
+          if (enable) {
+            el.setAttribute('inert', '');
+            el.setAttribute('aria-hidden', 'true');
+          } else {
+            el.removeAttribute('inert');
+            el.removeAttribute('aria-hidden');
+          }
+        });
+      } catch (_) {}
+    }
+
+    function focusAuthDialog() {
+      try {
+        if (!authOverlay) return;
+        const dialogContainer = authOverlay.querySelector('.auth-popup-container');
+        if (dialogContainer) {
+          if (!dialogContainer.hasAttribute('tabindex')) {
+            dialogContainer.setAttribute('tabindex', '-1');
+          }
+          dialogContainer.focus();
+          return;
+        }
+        // Fallback to first focusable element
+        const fallback = authOverlay.querySelector('#authPopupCloseBtn, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (fallback && typeof fallback.focus === 'function') fallback.focus();
+      } catch (_) {}
+    }
 
     function showAuthOverlay(message) {
       try {
         if (authStatusTextEl && message) authStatusTextEl.textContent = message;
-        if (authOverlay) authOverlay.classList.add('active');
+        if (authOverlay) {
+          previouslyFocusedElement = document.activeElement;
+          authOverlay.classList.add('active');
+          authOverlay.setAttribute('aria-hidden', 'false');
+          setPageInertExceptOverlay(true);
+          focusAuthDialog();
+        }
       } catch (_) {}
     }
 
     function hideAuthOverlay() {
       try {
-        if (authOverlay) authOverlay.classList.remove('active');
+        if (authOverlay) {
+          authOverlay.classList.remove('active');
+          authOverlay.setAttribute('aria-hidden', 'true');
+          setPageInertExceptOverlay(false);
+        }
+        if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+          previouslyFocusedElement.focus();
+        }
+        previouslyFocusedElement = null;
       } catch (_) {}
     }
 
