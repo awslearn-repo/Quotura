@@ -873,8 +873,10 @@
       editPanel.classList.add("active");
       if (quickEditBtn) quickEditBtn.style.opacity = "0.7";
     }
-    // Do not auto-open inline editor on image click to avoid text changes
-    if (inlineEditing) {
+    // Open the inline editor on image click, but do not modify text
+    if (!inlineEditing) {
+      openInlineEditor();
+    } else {
       try { inlineEditor.focus(); } catch (_) {}
     }
   }
@@ -1009,14 +1011,25 @@
   function openInlineEditor() {
     if (isChromeAvailable()) {
       chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
-        currentText = (data && data.quoteText) || currentText || "";
-        const storedHtml = data && data.quoteTextHtml;
-        if (storedHtml && typeof storedHtml === 'string' && storedHtml.length > 0) {
-          inlineEditor.innerHTML = storedHtml;
-          currentTextHtml = storedHtml;
+        // Prefer the in-memory text/html from the current image, fallback to storage
+        const preferredHtml = (typeof currentTextHtml === 'string' && currentTextHtml.length > 0)
+          ? currentTextHtml
+          : (data && typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0
+              ? data.quoteTextHtml
+              : null);
+
+        const preferredText = (typeof currentText === 'string')
+          ? currentText
+          : ((data && data.quoteText) || "");
+
+        if (preferredHtml) {
+          inlineEditor.innerHTML = preferredHtml;
+          currentTextHtml = preferredHtml;
         } else {
-          inlineEditor.textContent = currentText;
+          inlineEditor.textContent = preferredText;
+          currentTextHtml = null;
         }
+        currentText = preferredText;
         syncInlineEditorStyles();
         inlineEditing = true;
         inlineEditor.classList.add('active');
@@ -1026,12 +1039,13 @@
       setTimeout(updateActiveFormatButtons, 0);
       });
     } else {
-      currentText = currentText || "";
+      const preferredText = (typeof currentText === 'string') ? currentText : "";
       if (currentTextHtml && typeof currentTextHtml === 'string' && currentTextHtml.length > 0) {
         inlineEditor.innerHTML = currentTextHtml;
       } else {
-        inlineEditor.textContent = currentText;
+        inlineEditor.textContent = preferredText;
       }
+      currentText = preferredText;
       syncInlineEditorStyles();
       inlineEditing = true;
       inlineEditor.classList.add('active');
