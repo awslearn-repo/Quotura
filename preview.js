@@ -424,36 +424,6 @@
       }
     }
 
-    async function refreshUserTierUI() {
-      try {
-        if (!authStatus) return;
-        const getToken = (typeof window !== 'undefined' && window.getAuthToken) ? window.getAuthToken : null;
-        const client = (typeof window !== 'undefined' && window.apiClient) ? window.apiClient : null;
-        if (!getToken || !client) return;
-        const token = await getToken();
-        const data = await client.getUserTier(token);
-        const tier = data && data.tier;
-        const trial = data && data.trialStartDate;
-        let text = 'You are signed in.';
-        if (tier) text += ` Tier: ${tier.toUpperCase()}`;
-        if (trial) {
-          try {
-            const dt = new Date(trial);
-            text += ` · Trial start: ${dt.toLocaleDateString()}`;
-          } catch (_) {}
-        }
-        authStatus.textContent = text;
-      } catch (e) {
-        try {
-          if (e && (e.status === 401 || e.status === 403)) {
-            authStatus.textContent = 'Signed in, but authorization failed. Please sign in again.';
-          } else {
-            authStatus.textContent = 'Signed in. Configure auth to provide a Cognito token.';
-          }
-        } catch (_) {}
-      }
-    }
-
     function updateAuthUI(signedIn) {
       if (!authStatus || !loginBtn || !signupBtn || !logoutBtn) return;
       if (signedIn) {
@@ -462,8 +432,6 @@
         signupBtn.style.display = "none";
         logoutBtn.style.display = "inline-block";
         if (resumeAuthBtn) resumeAuthBtn.style.display = 'none';
-        // Attempt to fetch and display user tier from backend
-        try { refreshUserTierUI(); } catch (_) {}
       } else {
         authStatus.textContent = "You are not signed in.";
         loginBtn.style.display = "inline-block";
@@ -552,7 +520,6 @@
               hideAuthOverlay();
               tryCloseAuthPopupWindow();
               try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
-              try { refreshUserTierUI(); } catch (_) {}
             }
           }
         });
@@ -575,8 +542,6 @@
             }
           });
         } catch (_) {}
-      } else {
-        try { refreshUserTierUI(); } catch (_) {}
       }
     });
   }
