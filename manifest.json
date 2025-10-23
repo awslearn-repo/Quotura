@@ -4,6 +4,9 @@
   "version": "3.0",
   "description": "Highlight text, beautify it, and download as an image.",
   "permissions": ["contextMenus", "downloads", "storage"],
+  "host_permissions": [
+    "https://ffngxtofyb.execute-api.us-east-1.amazonaws.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
