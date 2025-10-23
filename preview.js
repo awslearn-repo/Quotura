@@ -873,10 +873,8 @@
       editPanel.classList.add("active");
       if (quickEditBtn) quickEditBtn.style.opacity = "0.7";
     }
-    // Also open the inline editor for immediate text editing
-    if (!inlineEditing) {
-      openInlineEditor();
-    } else {
+    // Do not auto-open inline editor on image click to avoid text changes
+    if (inlineEditing) {
       try { inlineEditor.focus(); } catch (_) {}
     }
   }
