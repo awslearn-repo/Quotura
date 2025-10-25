@@ -1342,6 +1342,18 @@
         flex-wrap: wrap;
         justify-content: center;
       }
+
+      /* Personalized greeting above the image, left-aligned with spacing */
+      .user-greeting {
+        width: 85%;
+        max-width: 85%;
+        margin: 12px auto 24px;
+        color: #ffffff;
+        font-weight: 700;
+        font-size: 20px;
+        text-align: left;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
     </style>
   </head>
   <body>
@@ -1419,6 +1431,9 @@
     <div id="editHint" style="color:#fff;text-align:center;font-weight:600;margin-top:8px;margin-bottom:6px;opacity:0.9;">
       Tip: click the image to edit the quote. The right panel will appear.
     </div>
+
+    <!-- Personalized greeting positioned above the image -->
+    <div id="userGreeting" class="user-greeting" aria-live="polite" aria-atomic="true"></div>
 
     <!-- Container for the generated quote image -->
     <div id="imageContainer">
