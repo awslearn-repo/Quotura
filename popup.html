@@ -9,11 +9,17 @@
     <!-- Extension title/branding -->
     <h1>Quotura</h1>
     
+    <!-- Personalized greeting (filled by popup.js if signed in) -->
+    <p id="greeting" aria-live="polite" style="margin-top: 0.25em; font-weight: 600;"></p>
+    
     <!-- User instructions explaining how to use the extension -->
     <!-- This popup appears when users click the extension icon in the toolbar -->
     <p>
       Highlight text on any page, then right-click and select "Beautify this" to
       create a quote image.
     </p>
+    
+    <!-- External JS for CSP compliance -->
+    <script src="popup.js"></script>
   </body>
 </html>

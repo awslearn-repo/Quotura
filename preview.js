@@ -32,6 +32,61 @@
   const resumeAuthBtn = document.getElementById("resumeAuthBtn");
   const authStatus = document.getElementById("authStatus");
   
+  // Helpers to decode JWT and extract a friendly display name
+  function base64UrlDecodeToString(base64Url) {
+    try {
+      let s = String(base64Url || "").replace(/-/g, "+").replace(/_/g, "/");
+      const pad = s.length % 4;
+      if (pad) s += "=".repeat(4 - pad);
+      const binary = atob(s);
+      try {
+        return new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
+      } catch (_) {
+        return binary;
+      }
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function decodeJwtPayload(jwt) {
+    try {
+      const parts = String(jwt || "").split(".");
+      if (parts.length < 2) return null;
+      const payloadJson = base64UrlDecodeToString(parts[1]);
+      return JSON.parse(payloadJson);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function extractDisplayNameFromClaims(claims) {
+    if (!claims || typeof claims !== 'object') return null;
+    const raw = claims.given_name || claims.name || claims.preferred_username || claims["cognito:username"] || claims.email || null;
+    if (!raw) return null;
+    const candidate = /@/.test(raw) ? raw.split('@')[0] : raw;
+    try {
+      return candidate
+        .split(/\s+|[_-]/)
+        .filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    } catch (_) {
+      return String(candidate);
+    }
+  }
+
+  function storeUserName(name) {
+    try {
+      if (!name) return;
+      if (isChromeAvailable()) {
+        chrome.storage.local.set({ cognitoUserName: name });
+      } else {
+        localStorage.setItem('cognitoUserName', name);
+      }
+    } catch (_) {}
+  }
+  
   // State variables
   let currentImageData = null;
   let watermarkRemoved = false;
@@ -68,6 +123,54 @@
     url.searchParams.set("client_id", config.clientId);
     url.searchParams.set("logout_uri", config.redirectUri);
     return url.toString();
+  }
+
+  function getCognitoTokenUrl(config) {
+    return new URL('/oauth2/token', config.domain).toString();
+  }
+
+  async function exchangeAuthCodeForTokens(authCode, redirectUriUsed) {
+    try {
+      if (!authCode) return null;
+      const tokenUrl = getCognitoTokenUrl(COGNITO_CONFIG);
+      const body = new URLSearchParams();
+      body.set('grant_type', 'authorization_code');
+      body.set('client_id', COGNITO_CONFIG.clientId);
+      body.set('code', authCode);
+      body.set('redirect_uri', redirectUriUsed || COGNITO_CONFIG.redirectUri);
+      const resp = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+      if (!resp.ok) return null;
+      const json = await resp.json();
+      const idToken = json && json.id_token;
+      if (!idToken) return null;
+      const claims = decodeJwtPayload(idToken);
+      const name = extractDisplayNameFromClaims(claims);
+      storeUserName(name);
+      try { if (isChromeAvailable()) chrome.storage.local.set({ cognitoIdToken: idToken }); } catch (_) {}
+      return name || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function applyGreetingIfAvailable(signedIn) {
+    try {
+      if (!authStatus) return;
+      if (!signedIn) return; // default text handled elsewhere
+      if (isChromeAvailable()) {
+        chrome.storage.local.get(['cognitoUserName'], (data) => {
+          const name = data && typeof data.cognitoUserName === 'string' ? data.cognitoUserName : null;
+          if (name && name.trim().length > 0) authStatus.textContent = `Hello ${name}`;
+        });
+      } else {
+        const name = localStorage.getItem('cognitoUserName');
+        if (name && name.trim().length > 0) authStatus.textContent = `Hello ${name}`;
+      }
+    } catch (_) {}
   }
 
   // Update background layer to reflect current gradient selection
@@ -334,7 +437,7 @@
       // If Chrome Identity API is available, prefer it (it will auto-close)
       if (isChromeAvailable() && chrome.identity && chrome.identity.launchWebAuthFlow) {
         try {
-          chrome.identity.launchWebAuthFlow({ url: authUrlForIdentity, interactive: true }, (responseUrl) => {
+          chrome.identity.launchWebAuthFlow({ url: authUrlForIdentity, interactive: true }, async (responseUrl) => {
             if (chrome.runtime && chrome.runtime.lastError) {
               // Identity failed; use our already-open popup
               try {
@@ -358,8 +461,14 @@
                 const parsed = new URL(responseUrl);
                 const code = parsed.searchParams.get('code');
                 if (code) {
+                  // Best-effort: exchange code to get ID token and user's name
+                  try {
+                    const name = await exchangeAuthCodeForTokens(code, identityRedirectUri);
+                    if (name && name.trim().length > 0) storeUserName(name);
+                  } catch (_) {}
                   setSignedIn(true, code);
                   updateAuthUI(true);
+                  applyGreetingIfAvailable(true);
                   hideAuthOverlay();
                   showNotification('Signed in successfully!', 'success');
                   // Close placeholder popup if we opened one
@@ -485,27 +594,31 @@
     const urlParams = new URLSearchParams(window.location.search);
     const authCode = urlParams.get("code");
     if (authCode) {
-      setSignedIn(true, authCode);
-      updateAuthUI(true);
-      // Clean the URL to remove the code param for aesthetics
-      try {
-        const cleanUrl = window.location.origin + window.location.pathname;
-        window.history.replaceState({}, document.title, cleanUrl);
-      } catch (_) {}
-      // If this page is opened as an auth popup, close it and return focus
-      try {
-        const closeSelf = () => { try { window.close(); } catch (_) {} };
-        if (window.opener && !window.opener.closed) {
-          // Give storage listeners a moment to fire
-          setTimeout(() => {
-            try { window.opener.focus(); } catch (_) {}
-            closeSelf();
-          }, 100);
-        } else {
-          // No opener reference (e.g., stripped by browser); attempt to close anyway
-          setTimeout(closeSelf, 100);
-        }
-      } catch (_) {}
+      // Attempt to exchange the code for ID token to get user's name (best-effort)
+      exchangeAuthCodeForTokens(authCode, COGNITO_CONFIG.redirectUri).finally(() => {
+        setSignedIn(true, authCode);
+        updateAuthUI(true);
+        applyGreetingIfAvailable(true);
+        // Clean the URL to remove the code param for aesthetics
+        try {
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        } catch (_) {}
+        // If this page is opened as an auth popup, close it and return focus
+        try {
+          const closeSelf = () => { try { window.close(); } catch (_) {} };
+          if (window.opener && !window.opener.closed) {
+            // Give storage listeners a moment to fire
+            setTimeout(() => {
+              try { window.opener.focus(); } catch (_) {}
+              closeSelf();
+            }, 100);
+          } else {
+            // No opener reference (e.g., stripped by browser); attempt to close anyway
+            setTimeout(closeSelf, 100);
+          }
+        } catch (_) {}
+      });
       return;
     }
 
@@ -516,6 +629,7 @@
           if (areaName === 'local' && changes && Object.prototype.hasOwnProperty.call(changes, 'cognitoSignedIn')) {
             const newVal = !!(changes.cognitoSignedIn && changes.cognitoSignedIn.newValue);
             updateAuthUI(newVal);
+            applyGreetingIfAvailable(newVal);
             if (newVal) {
               hideAuthOverlay();
               tryCloseAuthPopupWindow();
@@ -529,6 +643,7 @@
     // Otherwise, restore last-known state and pending overlay if any
     getSignedIn((signedIn) => {
       updateAuthUI(signedIn);
+      applyGreetingIfAvailable(signedIn);
       if (!signedIn) {
         try {
           chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
