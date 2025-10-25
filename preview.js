@@ -63,18 +63,46 @@
 
   function extractDisplayNameFromClaims(claims) {
     if (!claims || typeof claims !== 'object') return null;
-    // Prefer real name fields; avoid using raw Cognito username/user id
-    const raw = claims.given_name || claims.name || claims.preferred_username || claims.email || null;
-    if (!raw) return null;
-    const candidate = /@/.test(raw) ? raw.split('@')[0] : raw;
+    // Preference: name -> given_name + family_name -> email
+    const fullName = (claims.name && String(claims.name).trim()) || null;
+    const given = (claims.given_name && String(claims.given_name).trim()) || '';
+    const family = (claims.family_name && String(claims.family_name).trim()) || '';
+    const email = (claims.email && String(claims.email).trim()) || null;
+
+    let chosen = null;
+    if (fullName) {
+      chosen = fullName;
+    } else if (given || family) {
+      chosen = [given, family].filter(Boolean).join(' ');
+    } else if (email) {
+      // Use full email address as a fallback (don't strip domain)
+      return email;
+    } else {
+      return null;
+    }
+
+    // Title-case the name-like string without altering emails
     try {
-      return candidate
-        .split(/\s+|[_-]/)
+      return chosen
+        .split(/\s+/)
         .filter(Boolean)
         .map(w => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
     } catch (_) {
-      return String(candidate);
+      return String(chosen);
+    }
+  }
+
+  // Detect opaque IDs (e.g., Cognito usernames) to avoid displaying them
+  function looksLikeOpaqueId(value) {
+    try {
+      const s = String(value || '').trim();
+      if (!s) return false;
+      if (/@/.test(s)) return false; // emails are fine
+      if (/\s/.test(s)) return false; // names with spaces are fine
+      return /^[A-Za-z0-9_-]{8,}$/.test(s);
+    } catch (_) {
+      return false;
     }
   }
 
@@ -106,7 +134,8 @@
     domain: "https://us-east-1mguj75ffn.auth.us-east-1.amazoncognito.com",
     clientId: "4nak1safpk5ueahr20cr2n4vta",
     redirectUri: "chrome-extension://dlnlebhcjcjkpbggdloipihaobpmlbld/preview.html",
-    scopes: ["email", "openid"],
+    // Include 'profile' to receive name/given_name claims from Cognito
+    scopes: ["openid", "email", "profile"],
   };
 
   function buildCognitoAuthUrl(action, config, overrideRedirectUri) {
@@ -173,13 +202,20 @@
       if (isChromeAvailable()) {
         chrome.storage.local.get(['cognitoUserName', 'cognitoIdToken'], (data) => {
           let name = data && typeof data.cognitoUserName === 'string' ? data.cognitoUserName : null;
-          if (!name && data && typeof data.cognitoIdToken === 'string') {
-            const claims = decodeJwtPayload(data.cognitoIdToken);
+          const idToken = data && typeof data.cognitoIdToken === 'string' ? data.cognitoIdToken : null;
+          const maybeUpgradeFromClaims = () => {
+            if (!idToken) return name;
+            const claims = decodeJwtPayload(idToken);
             const computed = extractDisplayNameFromClaims(claims);
             if (computed && computed.trim().length > 0) {
               name = computed;
               try { chrome.storage.local.set({ cognitoUserName: computed }); } catch (_) {}
             }
+            return name;
+          };
+          // If missing or looks like an opaque id, try to upgrade from claims
+          if (!name || looksLikeOpaqueId(name)) {
+            name = maybeUpgradeFromClaims();
           }
           setGreetingTexts(name);
         });
