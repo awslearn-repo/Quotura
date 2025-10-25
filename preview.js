@@ -31,6 +31,7 @@
   const logoutBtn = document.getElementById("logoutBtn");
   const resumeAuthBtn = document.getElementById("resumeAuthBtn");
   const authStatus = document.getElementById("authStatus");
+  const userGreeting = document.getElementById("userGreeting");
   
   // Helpers to decode JWT and extract a friendly display name
   function base64UrlDecodeToString(base64Url) {
@@ -62,7 +63,8 @@
 
   function extractDisplayNameFromClaims(claims) {
     if (!claims || typeof claims !== 'object') return null;
-    const raw = claims.given_name || claims.name || claims.preferred_username || claims["cognito:username"] || claims.email || null;
+    // Prefer real name fields; avoid using raw Cognito username/user id
+    const raw = claims.given_name || claims.name || claims.preferred_username || claims.email || null;
     if (!raw) return null;
     const candidate = /@/.test(raw) ? raw.split('@')[0] : raw;
     try {
@@ -159,16 +161,31 @@
 
   function applyGreetingIfAvailable(signedIn) {
     try {
-      if (!authStatus) return;
-      if (!signedIn) return; // default text handled elsewhere
+      if (!signedIn) {
+        if (userGreeting) userGreeting.textContent = '';
+        return; // default auth text handled elsewhere
+      }
+      const setGreetingTexts = (name) => {
+        const hasName = name && String(name).trim().length > 0;
+        if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}` : '';
+        if (hasName && authStatus) authStatus.textContent = `Hello ${name}`;
+      };
       if (isChromeAvailable()) {
-        chrome.storage.local.get(['cognitoUserName'], (data) => {
-          const name = data && typeof data.cognitoUserName === 'string' ? data.cognitoUserName : null;
-          if (name && name.trim().length > 0) authStatus.textContent = `Hello ${name}`;
+        chrome.storage.local.get(['cognitoUserName', 'cognitoIdToken'], (data) => {
+          let name = data && typeof data.cognitoUserName === 'string' ? data.cognitoUserName : null;
+          if (!name && data && typeof data.cognitoIdToken === 'string') {
+            const claims = decodeJwtPayload(data.cognitoIdToken);
+            const computed = extractDisplayNameFromClaims(claims);
+            if (computed && computed.trim().length > 0) {
+              name = computed;
+              try { chrome.storage.local.set({ cognitoUserName: computed }); } catch (_) {}
+            }
+          }
+          setGreetingTexts(name);
         });
       } else {
         const name = localStorage.getItem('cognitoUserName');
-        if (name && name.trim().length > 0) authStatus.textContent = `Hello ${name}`;
+        setGreetingTexts(name);
       }
     } catch (_) {}
   }
@@ -546,6 +563,7 @@
         loginBtn.style.display = "inline-block";
         signupBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
+        if (userGreeting) userGreeting.textContent = '';
         if (resumeAuthBtn) {
           try {
             chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
