@@ -583,6 +583,27 @@
         z-index: 1000;
         min-width: 120px;
       }
+      /* Lock overlay for free plan over the edit panel */
+      .panel-lock-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: #fff;
+        font-weight: 800;
+        background: rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(2px);
+        border-radius: 20px 0 0 20px;
+        z-index: 1001;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      }
+      .edit-panel.locked .panel-lock-overlay { display: flex; }
+      .locked-hint { opacity: 0.9; font-weight: 700; }
       
       .edit-panel.active {
         right: 20px; /* Slides in from right */
@@ -1342,6 +1363,8 @@
         flex-wrap: wrap;
         justify-content: center;
       }
+      /* Upgrade button visual */
+      #upgradeBtn { min-width: 180px; }
 
       /* Personalized greeting above the image, left-aligned with spacing */
       .user-greeting {
@@ -1389,6 +1412,7 @@
         <button id="loginBtn" class="export-btn btn-secondary">🔐 Login</button>
         <button id="signupBtn" class="export-btn btn-primary">📝 Sign up</button>
         <button id="logoutBtn" class="export-btn btn-warning" style="display:none;">🚪 Sign out</button>
+        <button id="upgradeBtn" class="export-btn btn-success">⭐ Upgrade to Pro</button>
       </div>
     </div>
     
@@ -1425,6 +1449,10 @@
           <span class="btn-icon">✅</span>
           <span class="btn-text">Done</span>
         </button>
+        <div id="editPanelLock" class="panel-lock-overlay" aria-hidden="true">
+          <span aria-hidden="true">🔒</span>
+          <span>Pro feature</span>
+        </div>
       </div>
     </div>
     
@@ -1465,6 +1493,23 @@
           <div class="auth-popup-text">Opening secure sign-in…</div>
           <div class="auth-popup-actions">
             <button id="authPopupOpenExternalBtn" class="export-btn btn-secondary" style="display:none;">Open sign-in popup</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Simple Upgrade to Pro Overlay (placeholder for future upgrade flow) -->
+    <div id="upgradePopupOverlay" class="auth-popup-overlay" aria-hidden="true">
+      <div class="auth-popup-backdrop"></div>
+      <div class="auth-popup-container" role="dialog" aria-modal="true" aria-labelledby="upgradePopupTitle" tabindex="-1">
+        <div class="auth-popup-header">
+          <h3 id="upgradePopupTitle">Upgrade to Pro</h3>
+          <button id="upgradePopupCloseBtn" class="close-btn" aria-label="Close">✕</button>
+        </div>
+        <div class="auth-popup-body">
+          <div class="auth-popup-text">Unlock the editor and remove the watermark with Pro.</div>
+          <div class="auth-popup-actions">
+            <button id="upgradeStartBtn" class="export-btn btn-success">⭐ Upgrade</button>
           </div>
         </div>
       </div>

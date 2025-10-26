@@ -100,6 +100,7 @@
   let currentTextHtml = null;       // Current editable HTML content with formatting
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
+  let userIsPro = false;            // Current gating flag
 
   // Centralized Cognito configuration and URL builders
   const COGNITO_CONFIG = {
@@ -247,6 +248,69 @@
         const name = localStorage.getItem('cognitoUserName');
         const tier = localStorage.getItem('userTier');
         setGreetingTexts(name, tier);
+      }
+    } catch (_) {}
+  }
+
+  // ---- Pro plan gating helpers ----
+  function applyPlanGating(tier) {
+    try {
+      userIsPro = (tier === 'pro');
+      const upgradeBtn = document.getElementById('upgradeBtn');
+      const editHint = document.getElementById('editHint');
+
+      // Toggle upgrade button visibility
+      if (upgradeBtn) upgradeBtn.style.display = userIsPro ? 'none' : 'inline-block';
+
+      // Lock/unlock the right editor panel
+      if (editPanel) {
+        editPanel.classList.toggle('locked', !userIsPro);
+      }
+
+      // Update inline editor editability and cursor
+      if (inlineEditor) {
+        if (userIsPro) {
+          inlineEditor.setAttribute('contenteditable', 'true');
+          inlineEditor.style.cursor = 'text';
+        } else {
+          inlineEditor.setAttribute('contenteditable', 'false');
+          inlineEditor.style.cursor = 'not-allowed';
+        }
+      }
+
+      // Update Remove Watermark button label for free users (keep clickable to show upgrade)
+      if (removeWatermarkBtn) {
+        if (!userIsPro && !watermarkRemoved) {
+          removeWatermarkBtn.textContent = '🚫 Remove Watermark (Pro)';
+        } else if (!watermarkRemoved) {
+          removeWatermarkBtn.textContent = '🚫 Remove Watermark';
+        }
+      }
+
+      // Update instructional hint
+      if (editHint) {
+        if (userIsPro) {
+          editHint.textContent = 'Tip: click the image to edit the quote. The right panel will appear.';
+        } else {
+          editHint.textContent = 'Tip: click the image to preview editing. Upgrade to Pro to edit.';
+        }
+      }
+
+      // Ensure overlays align after layout changes
+      try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
+    } catch (_) {}
+  }
+
+  function applyPlanGatingFromStorage() {
+    try {
+      if (isChromeAvailable()) {
+        chrome.storage.local.get(['userTier'], (data) => {
+          const tier = data && data.userTier === 'pro' ? 'pro' : 'free';
+          applyPlanGating(tier);
+        });
+      } else {
+        const tier = (localStorage.getItem('userTier') === 'pro') ? 'pro' : 'free';
+        applyPlanGating(tier);
       }
     } catch (_) {}
   }
@@ -637,7 +701,9 @@
         logoutBtn.style.display = "inline-block";
         if (resumeAuthBtn) resumeAuthBtn.style.display = 'none';
         // Fetch and display user tier after sign-in
-        fetchUserTierAndStore().then(() => applyGreetingIfAvailable(true)).catch(() => {});
+        fetchUserTierAndStore()
+          .then((res) => { applyGreetingIfAvailable(true); applyPlanGating(res && res.tier ? res.tier : 'free'); })
+          .catch(() => { applyGreetingIfAvailable(true); applyPlanGatingFromStorage(); });
       } else {
         // Show explicit status when signed out
         authStatus.textContent = "You are not signed in.";
@@ -646,6 +712,7 @@
         signupBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
         if (userGreeting) userGreeting.textContent = '';
+        applyPlanGating('free');
         if (resumeAuthBtn) {
           try {
             chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
@@ -699,7 +766,9 @@
         setSignedIn(true, authCode);
         updateAuthUI(true);
         // Also fetch the user tier immediately
-        fetchUserTierAndStore().then(() => applyGreetingIfAvailable(true)).catch(() => applyGreetingIfAvailable(true));
+        fetchUserTierAndStore()
+          .then((res) => { applyGreetingIfAvailable(true); applyPlanGating(res && res.tier ? res.tier : 'free'); })
+          .catch(() => { applyGreetingIfAvailable(true); applyPlanGatingFromStorage(); });
         // Clean the URL to remove the code param for aesthetics
         try {
           const cleanUrl = window.location.origin + window.location.pathname;
@@ -737,6 +806,10 @@
               try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
             }
           }
+          if (areaName === 'local' && changes && Object.prototype.hasOwnProperty.call(changes, 'userTier')) {
+            const newTier = (changes.userTier && changes.userTier.newValue) || 'free';
+            applyPlanGating(newTier);
+          }
         });
       }
     } catch (_) {}
@@ -746,9 +819,12 @@
       updateAuthUI(signedIn);
       if (signedIn) {
         // Ensure tier is loaded if returning user
-        fetchUserTierAndStore().then(() => applyGreetingIfAvailable(true)).catch(() => applyGreetingIfAvailable(true));
+        fetchUserTierAndStore()
+          .then((res) => { applyGreetingIfAvailable(true); applyPlanGating(res && res.tier ? res.tier : 'free'); })
+          .catch(() => { applyGreetingIfAvailable(true); applyPlanGatingFromStorage(); });
       } else {
         applyGreetingIfAvailable(false);
+        applyPlanGating('free');
       }
       if (!signedIn) {
         try {
@@ -1027,6 +1103,10 @@
    * Show support modal and proceed with watermark removal
    */
   function handleRemoveWatermarkClick() {
+    if (!userIsPro) {
+      showUpgradeOverlay('Removing watermark is a Pro feature.');
+      return;
+    }
     if (!watermarkRemoved && isChromeAvailable()) {
       const modal = createSupportModal();
       document.body.appendChild(modal);
@@ -1098,7 +1178,7 @@
     if (!inlineEditing) {
       openInlineEditor();
     } else {
-      try { inlineEditor.focus(); } catch (_) {}
+      if (userIsPro) { try { inlineEditor.focus(); } catch (_) {} }
     }
   }
 
@@ -1199,6 +1279,7 @@
 
   function toggleCommand(command) {
     try {
+      if (!userIsPro) { showUpgradeOverlay('Text formatting is a Pro feature.'); return; }
       ensureInlineEditorOpen();
       // Use deprecated execCommand for simplicity; widely supported for contentEditable
       document.execCommand(command, false, null);
@@ -1254,10 +1335,17 @@
         syncInlineEditorStyles();
         inlineEditing = true;
         inlineEditor.classList.add('active');
+        // Apply content editability based on plan
+        if (userIsPro) {
+          inlineEditor.setAttribute('contenteditable', 'true');
+          placeCaretAtEnd(inlineEditor);
+          inlineEditor.focus();
+        } else {
+          inlineEditor.setAttribute('contenteditable', 'false');
+          inlineEditor.style.cursor = 'not-allowed';
+        }
         showEditingVisuals();
-        placeCaretAtEnd(inlineEditor);
-      inlineEditor.focus();
-      setTimeout(updateActiveFormatButtons, 0);
+        setTimeout(updateActiveFormatButtons, 0);
       });
     } else {
       const preferredText = (typeof currentText === 'string') ? currentText : "";
@@ -1270,10 +1358,16 @@
       syncInlineEditorStyles();
       inlineEditing = true;
       inlineEditor.classList.add('active');
+      if (userIsPro) {
+        inlineEditor.setAttribute('contenteditable', 'true');
+        placeCaretAtEnd(inlineEditor);
+        inlineEditor.focus();
+      } else {
+        inlineEditor.setAttribute('contenteditable', 'false');
+        inlineEditor.style.cursor = 'not-allowed';
+      }
       showEditingVisuals();
-      placeCaretAtEnd(inlineEditor);
-    inlineEditor.focus();
-    setTimeout(updateActiveFormatButtons, 0);
+      setTimeout(updateActiveFormatButtons, 0);
     }
   }
 
@@ -1656,8 +1750,8 @@
   // Event listeners for edit panel
   fontBtn.addEventListener("click", handleFontChange);
   backgroundBtn.addEventListener("click", handleBackgroundChange);
-  decreaseSizeBtn.addEventListener("click", () => handleSizeChange(-2));
-  increaseSizeBtn.addEventListener("click", () => handleSizeChange(2));
+  decreaseSizeBtn.addEventListener("click", () => { if (!userIsPro) return showUpgradeOverlay('Editor is locked. Upgrade to Pro.'); handleSizeChange(-2); });
+  increaseSizeBtn.addEventListener("click", () => { if (!userIsPro) return showUpgradeOverlay('Editor is locked. Upgrade to Pro.'); handleSizeChange(2); });
   doneBtn.addEventListener("click", handleDone);
   
   // Open quick edit panel when image is clicked
@@ -1665,6 +1759,7 @@
   
   // Inline editor live update
   inlineEditor.addEventListener('input', () => {
+    if (!userIsPro) { showUpgradeOverlay('Editing text is a Pro feature.'); return; }
     const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
     const newHtml = inlineEditor.innerHTML || '';
     currentText = newText;
@@ -1696,6 +1791,66 @@
   if (boldBtn) boldBtn.addEventListener('click', () => toggleCommand('bold'));
   if (italicBtn) italicBtn.addEventListener('click', () => toggleCommand('italic'));
   if (underlineBtn) underlineBtn.addEventListener('click', () => toggleCommand('underline'));
+  
+  // Upgrade overlay wiring
+  const upgradeBtn = document.getElementById('upgradeBtn');
+  const upgradeOverlay = document.getElementById('upgradePopupOverlay');
+  const upgradeCloseBtn = document.getElementById('upgradePopupCloseBtn');
+  const upgradeStartBtn = document.getElementById('upgradeStartBtn');
+  const editPanelLock = document.getElementById('editPanelLock');
+
+  function setPageInertExceptUpgrade(enable) {
+    try {
+      if (!upgradeOverlay) return;
+      const children = Array.from(document.body.children);
+      children.forEach((el) => {
+        if (el === upgradeOverlay) return;
+        if (enable) { el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); }
+        else { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
+      });
+    } catch (_) {}
+  }
+
+  function focusUpgradeDialog() {
+    try {
+      if (!upgradeOverlay) return;
+      const dialogContainer = upgradeOverlay.querySelector('.auth-popup-container');
+      if (dialogContainer) {
+        if (!dialogContainer.hasAttribute('tabindex')) dialogContainer.setAttribute('tabindex', '-1');
+        dialogContainer.focus();
+      }
+    } catch (_) {}
+  }
+
+  function showUpgradeOverlay(message) {
+    try {
+      if (!upgradeOverlay) return;
+      const textEl = upgradeOverlay.querySelector('.auth-popup-text');
+      if (textEl && message) textEl.textContent = message;
+      upgradeOverlay.classList.add('active');
+      upgradeOverlay.setAttribute('aria-hidden', 'false');
+      focusUpgradeDialog();
+      setPageInertExceptUpgrade(true);
+    } catch (_) {}
+  }
+
+  function hideUpgradeOverlay() {
+    try {
+      if (!upgradeOverlay) return;
+      upgradeOverlay.classList.remove('active');
+      upgradeOverlay.setAttribute('aria-hidden', 'true');
+      setPageInertExceptUpgrade(false);
+      try { if (upgradeBtn) upgradeBtn.focus(); } catch (_) {}
+    } catch (_) {}
+  }
+
+  if (upgradeBtn) upgradeBtn.addEventListener('click', () => showUpgradeOverlay('Unlock Pro features.'));
+  if (upgradeCloseBtn) upgradeCloseBtn.addEventListener('click', hideUpgradeOverlay);
+  if (upgradeStartBtn) upgradeStartBtn.addEventListener('click', () => { hideUpgradeOverlay(); showNotification('Upgrade flow coming soon.', 'info'); });
+  if (editPanelLock) editPanelLock.addEventListener('click', () => showUpgradeOverlay('The editor is locked. Upgrade to Pro.'));
+
+  // Apply gating immediately on load
+  applyPlanGatingFromStorage();
   
   // Interactive blob functionality
   initializeInteractiveBlobs();
