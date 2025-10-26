@@ -168,7 +168,6 @@
       const setGreetingTexts = (name) => {
         const hasName = name && String(name).trim().length > 0;
         if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}` : '';
-        if (hasName && authStatus) authStatus.textContent = `Hello ${name}`;
         // Ensure greeting width aligns with image after text updates
         try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
       };
