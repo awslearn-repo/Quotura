@@ -168,7 +168,6 @@
       const setGreetingTexts = (name) => {
         const hasName = name && String(name).trim().length > 0;
         if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}` : '';
-        if (hasName && authStatus) authStatus.textContent = `Hello ${name}`;
         // Ensure greeting width aligns with image after text updates
         try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
       };
@@ -570,13 +569,17 @@
     function updateAuthUI(signedIn) {
       if (!authStatus || !loginBtn || !signupBtn || !logoutBtn) return;
       if (signedIn) {
-        authStatus.textContent = "You are signed in.";
+        // Hide auth status when signed in; greeting above image indicates state
+        authStatus.textContent = "";
+        try { authStatus.style.display = 'none'; } catch (_) {}
         loginBtn.style.display = "none";
         signupBtn.style.display = "none";
         logoutBtn.style.display = "inline-block";
         if (resumeAuthBtn) resumeAuthBtn.style.display = 'none';
       } else {
+        // Show explicit status when signed out
         authStatus.textContent = "You are not signed in.";
+        try { authStatus.style.display = 'block'; } catch (_) {}
         loginBtn.style.display = "inline-block";
         signupBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
