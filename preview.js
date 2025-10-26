@@ -169,6 +169,8 @@
         const hasName = name && String(name).trim().length > 0;
         if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}` : '';
         if (hasName && authStatus) authStatus.textContent = `Hello ${name}`;
+        // Ensure greeting width aligns with image after text updates
+        try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
       };
       if (isChromeAvailable()) {
         chrome.storage.local.get(['cognitoUserName', 'cognitoIdToken'], (data) => {
@@ -232,19 +234,34 @@
     }
   }
 
-  // Ensure edit overlays match the rendered image size exactly
+  // Ensure edit overlays and greeting match the rendered image size exactly
   function syncEditOverlayToImage() {
     try {
-      if (!img || !editBackground || !inlineEditor) return;
+      if (!img) return;
       const imageWidth = img.clientWidth;
       const imageHeight = img.clientHeight;
       if (!imageWidth || !imageHeight) return;
+
       // Match background size to image
-      editBackground.style.width = `${imageWidth}px`;
-      editBackground.style.height = `${imageHeight}px`;
+      if (editBackground) {
+        editBackground.style.width = `${imageWidth}px`;
+        editBackground.style.height = `${imageHeight}px`;
+      }
+
       // Keep editor width aligned with image for consistent typing area
-      inlineEditor.style.width = `${imageWidth}px`;
-      inlineEditor.style.maxWidth = `${imageWidth}px`;
+      if (inlineEditor) {
+        inlineEditor.style.width = `${imageWidth}px`;
+        inlineEditor.style.maxWidth = `${imageWidth}px`;
+      }
+
+      // Align greeting container width and centering with the image so left edges match
+      if (userGreeting) {
+        userGreeting.style.width = `${imageWidth}px`;
+        userGreeting.style.maxWidth = `${imageWidth}px`;
+        // Center horizontally so its left edge aligns with the centered image
+        userGreeting.style.marginLeft = 'auto';
+        userGreeting.style.marginRight = 'auto';
+      }
     } catch (_) {}
   }
 
