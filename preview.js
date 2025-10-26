@@ -1196,6 +1196,11 @@
       editPanel.classList.add("active");
       if (quickEditBtn) quickEditBtn.style.opacity = "0.7";
     }
+    // For non-Pro users, do not open inline editor or hide the image
+    if (!userIsPro) {
+      showUpgradeOverlay('Editing is a Pro feature.');
+      return;
+    }
     // Open the inline editor on image click, but do not modify text
     if (!inlineEditing) {
       openInlineEditor();
@@ -1333,6 +1338,8 @@
   }
 
   function openInlineEditor() {
+    // Guard to ensure only Pro users can enter inline editing mode
+    if (!userIsPro) { showUpgradeOverlay('Editing text is a Pro feature.'); return; }
     if (isChromeAvailable()) {
       chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
         // Prefer the in-memory text/html from the current image, fallback to storage
