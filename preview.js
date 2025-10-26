@@ -109,6 +109,13 @@
     scopes: ["email", "openid"],
   };
 
+  // Backend API configuration
+  const AWS_REGION = "us-east-1";
+  const API_BASE_URL = `https://ffngxtofyb.execute-api.${AWS_REGION}.amazonaws.com`;
+  const API_ENDPOINTS = {
+    user: `${API_BASE_URL}/user`,
+  };
+
   function buildCognitoAuthUrl(action, config, overrideRedirectUri) {
     const url = new URL(`/${action}`, config.domain);
     url.searchParams.set("client_id", config.clientId);
@@ -159,20 +166,68 @@
     }
   }
 
+  async function getIdTokenFromStorage() {
+    return new Promise((resolve) => {
+      try {
+        if (isChromeAvailable()) {
+          chrome.storage.local.get(["cognitoIdToken"], (data) => {
+            resolve((data && typeof data.cognitoIdToken === "string") ? data.cognitoIdToken : null);
+          });
+        } else {
+          resolve(localStorage.getItem("cognitoIdToken") || null);
+        }
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
+  async function fetchUserTierAndStore() {
+    try {
+      const idToken = await getIdTokenFromStorage();
+      if (!idToken) return null;
+      const resp = await fetch(API_ENDPOINTS.user, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          Accept: "application/json",
+        },
+        credentials: "omit",
+        cache: "no-store",
+      });
+      if (!resp.ok) return null;
+      const json = await resp.json();
+      const tier = json && (json.tier === "pro" ? "pro" : "free");
+      const trialStartDate = json && typeof json.trialStartDate === "string" ? json.trialStartDate : null;
+      try {
+        if (isChromeAvailable()) {
+          chrome.storage.local.set({ userTier: tier, userTrialStartDate: trialStartDate || null });
+        } else {
+          localStorage.setItem("userTier", tier || "");
+          if (trialStartDate) localStorage.setItem("userTrialStartDate", trialStartDate);
+        }
+      } catch (_) {}
+      return { tier, trialStartDate };
+    } catch (_) {
+      return null;
+    }
+  }
+
   function applyGreetingIfAvailable(signedIn) {
     try {
       if (!signedIn) {
         if (userGreeting) userGreeting.textContent = '';
         return; // default auth text handled elsewhere
       }
-      const setGreetingTexts = (name) => {
+      const setGreetingTexts = (name, tier) => {
         const hasName = name && String(name).trim().length > 0;
-        if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}` : '';
+        const planSuffix = tier ? (tier === 'pro' ? ' — Pro plan' : ' — Free plan') : '';
+        if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}${planSuffix}` : '';
         // Ensure greeting width aligns with image after text updates
         try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
       };
-      if (isChromeAvailable()) {
-        chrome.storage.local.get(['cognitoUserName', 'cognitoIdToken'], (data) => {
+      const updateFromStorage = () => {
+        chrome.storage.local.get(['cognitoUserName', 'cognitoIdToken', 'userTier'], (data) => {
           let name = data && typeof data.cognitoUserName === 'string' ? data.cognitoUserName : null;
           if (!name && data && typeof data.cognitoIdToken === 'string') {
             const claims = decodeJwtPayload(data.cognitoIdToken);
@@ -182,11 +237,16 @@
               try { chrome.storage.local.set({ cognitoUserName: computed }); } catch (_) {}
             }
           }
-          setGreetingTexts(name);
+          const tier = data && typeof data.userTier === 'string' ? data.userTier : null;
+          setGreetingTexts(name, tier);
         });
+      };
+      if (isChromeAvailable()) {
+        updateFromStorage();
       } else {
         const name = localStorage.getItem('cognitoUserName');
-        setGreetingTexts(name);
+        const tier = localStorage.getItem('userTier');
+        setGreetingTexts(name, tier);
       }
     } catch (_) {}
   }
@@ -576,6 +636,8 @@
         signupBtn.style.display = "none";
         logoutBtn.style.display = "inline-block";
         if (resumeAuthBtn) resumeAuthBtn.style.display = 'none';
+        // Fetch and display user tier after sign-in
+        fetchUserTierAndStore().then(() => applyGreetingIfAvailable(true)).catch(() => {});
       } else {
         // Show explicit status when signed out
         authStatus.textContent = "You are not signed in.";
@@ -636,7 +698,8 @@
       exchangeAuthCodeForTokens(authCode, COGNITO_CONFIG.redirectUri).finally(() => {
         setSignedIn(true, authCode);
         updateAuthUI(true);
-        applyGreetingIfAvailable(true);
+        // Also fetch the user tier immediately
+        fetchUserTierAndStore().then(() => applyGreetingIfAvailable(true)).catch(() => applyGreetingIfAvailable(true));
         // Clean the URL to remove the code param for aesthetics
         try {
           const cleanUrl = window.location.origin + window.location.pathname;
@@ -681,7 +744,12 @@
     // Otherwise, restore last-known state and pending overlay if any
     getSignedIn((signedIn) => {
       updateAuthUI(signedIn);
-      applyGreetingIfAvailable(signedIn);
+      if (signedIn) {
+        // Ensure tier is loaded if returning user
+        fetchUserTierAndStore().then(() => applyGreetingIfAvailable(true)).catch(() => applyGreetingIfAvailable(true));
+      } else {
+        applyGreetingIfAvailable(false);
+      }
       if (!signedIn) {
         try {
           chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
