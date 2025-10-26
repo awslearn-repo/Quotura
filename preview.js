@@ -1196,20 +1196,11 @@
       editPanel.classList.add("active");
       if (quickEditBtn) quickEditBtn.style.opacity = "0.7";
     }
-    // For Pro users, open the inline editor. For non-Pro, keep image visible and show upgrade.
-    if (userIsPro) {
-      if (!inlineEditing) {
-        openInlineEditor();
-      } else {
-        try { inlineEditor.focus(); } catch (_) {}
-      }
+    // Open the inline editor on image click, but do not modify text
+    if (!inlineEditing) {
+      openInlineEditor();
     } else {
-      // Do not open inline editor or hide the image for non-Pro users
-      if (inlineEditing) {
-        closeInlineEditor();
-      }
-      hideEditingVisuals();
-      showUpgradeOverlay('The editor is locked. Upgrade to Pro.');
+      try { inlineEditor.focus(); } catch (_) {}
     }
   }
 
