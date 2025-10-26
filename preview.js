@@ -412,8 +412,15 @@
   function showEditingVisuals() {
     // Ensure overlay matches current image size before showing
     syncEditOverlayToImage();
-    if (editBackground) editBackground.classList.add('active');
-    if (img) img.style.visibility = 'hidden';
+    // For Pro users, show the editable background and hide the image under it.
+    // For Free or signed-out users, keep the watermarked image visible and do not show the overlay.
+    if (userIsPro) {
+      if (editBackground) editBackground.classList.add('active');
+      if (img) img.style.visibility = 'hidden';
+    } else {
+      if (editBackground) editBackground.classList.remove('active');
+      if (img) img.style.visibility = 'visible';
+    }
     updateEditBackgroundGradient();
   }
 
@@ -919,7 +926,8 @@
     downloadPngBtn.disabled = false;
     downloadSvgBtn.disabled = false;
     copyImageBtn.disabled = false;
-    removeWatermarkBtn.disabled = watermarkRemoved;
+    // Only Pro users can click Remove Watermark and only until it's removed
+    removeWatermarkBtn.disabled = (!userIsPro) || watermarkRemoved;
     if (watermarkRemoved) {
       removeWatermarkBtn.textContent = "✅ Watermark Removed";
       removeWatermarkBtn.classList.remove("btn-warning");
@@ -1191,11 +1199,16 @@
       editPanel.classList.add("active");
       if (quickEditBtn) quickEditBtn.style.opacity = "0.7";
     }
-    // Open the inline editor on image click, but do not modify text
+    // For non-Pro (including signed-out), keep image visible and panel locked without opening editor
+    if (!userIsPro) {
+      hideEditingVisuals();
+      return;
+    }
+    // Pro users: open the inline editor on first click; focus if already open
     if (!inlineEditing) {
       openInlineEditor();
     } else {
-      if (userIsPro) { try { inlineEditor.focus(); } catch (_) {} }
+      try { inlineEditor.focus(); } catch (_) {}
     }
   }
 
