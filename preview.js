@@ -293,11 +293,6 @@
         }
       }
 
-      // Update image cursor to reflect clickability
-      if (img) {
-        try { img.style.cursor = userIsPro ? 'pointer' : 'default'; } catch (_) {}
-      }
-
       // Update Remove Watermark button label for free users (keep clickable to show upgrade)
       if (removeWatermarkBtn) {
         if (!userIsPro && !watermarkRemoved) {
@@ -312,7 +307,7 @@
         if (userIsPro) {
           editHint.textContent = 'Tip: click the image to edit the quote. The right panel will appear.';
         } else {
-          editHint.textContent = 'Editing is a Pro feature. Sign in and upgrade to edit.';
+          editHint.textContent = 'Tip: click the image to preview editing. Upgrade to Pro to edit.';
         }
       }
 
@@ -1190,11 +1185,6 @@
    * Handle Quick Edit button click - shows edit panel
    */
   function handleQuickEdit() {
-    // Block editing for non-Pro (including signed-out) users
-    if (!userIsPro) {
-      showUpgradeOverlay('Editing is a Pro feature. Sign in and upgrade to edit.');
-      return;
-    }
     // Ensure right panel is visible
     if (!editMode) {
       editMode = true;
@@ -1205,7 +1195,7 @@
     if (!inlineEditing) {
       openInlineEditor();
     } else {
-      try { inlineEditor.focus(); } catch (_) {}
+      if (userIsPro) { try { inlineEditor.focus(); } catch (_) {} }
     }
   }
 
