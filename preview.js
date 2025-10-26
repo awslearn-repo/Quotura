@@ -293,9 +293,9 @@
         }
       }
 
-      // Update image cursor to reflect clickability
+      // Update image cursor to reflect clickability for all users
       if (img) {
-        try { img.style.cursor = userIsPro ? 'pointer' : 'default'; } catch (_) {}
+        try { img.style.cursor = 'pointer'; } catch (_) {}
       }
 
       // Update Remove Watermark button label for free users (keep clickable to show upgrade)
@@ -1190,12 +1190,7 @@
    * Handle Quick Edit button click - shows edit panel
    */
   function handleQuickEdit() {
-    // Block editing for non-Pro (including signed-out) users
-    if (!userIsPro) {
-      showUpgradeOverlay('Editing is a Pro feature. Sign in and upgrade to edit.');
-      return;
-    }
-    // Ensure right panel is visible
+    // Ensure right panel is visible for all users; non-Pro users see it locked
     if (!editMode) {
       editMode = true;
       editPanel.classList.add("active");
