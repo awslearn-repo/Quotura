@@ -61,43 +61,50 @@ chrome.contextMenus.onClicked.addListener((info) => {
 });
 
 // Handle messages from preview tab for additional functionality
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "generateWithoutWatermark") {
-    // Prefer custom image background if available
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
-        generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
-          sendResponse({ imageData });
-        });
-      } else if (data.quoteText && data.currentGradient) {
-        generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
-          sendResponse({ imageData });
-        });
-      } else if (data.quoteText) {
-        // Fallback: if no gradient stored, use the original function
-        generateQuoteImageData(data.quoteText, false).then((imageData) => {
-          sendResponse({ imageData });
-        });
-      }
-    });
-    return true; // Keep message channel open for async response
-  }
-  
-  if (request.action === "generateSVG") {
-    // Generate SVG version of the quote, preferring custom image background
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
-        generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
-          sendResponse({ svgData });
-        });
-      } else if (data.quoteText) {
-        const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
-        sendResponse({ svgData });
-      }
-    });
-    return true; // Keep message channel open for async response
-  }
-});
+// ===== Pro entitlement verification (server-backed, short-lived cache) =====
+const ENTITLEMENT_TTL_MS = 60 * 1000; // 60s cache to reduce API chatter
+let lastEntitlementCheckMs = 0;
+let lastEntitlementIsPro = false;
+const ENT_AWS_REGION = 'us-east-1';
+
+async function verifyProEntitlement() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(['cognitoIdToken'], async (data) => {
+        const idToken = data && typeof data.cognitoIdToken === 'string' ? data.cognitoIdToken : null;
+        if (!idToken) { resolve(false); return; }
+
+        const now = Date.now();
+        if (now - lastEntitlementCheckMs < ENTITLEMENT_TTL_MS) {
+          resolve(lastEntitlementIsPro);
+          return;
+        }
+
+        const apiUrl = `https://ffngxtofyb.execute-api.${ENT_AWS_REGION}.amazonaws.com/user`;
+        try {
+          const resp = await fetch(apiUrl, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${idToken}`, Accept: 'application/json' },
+            credentials: 'omit',
+            cache: 'no-store',
+          });
+          if (!resp.ok) { lastEntitlementCheckMs = now; lastEntitlementIsPro = false; resolve(false); return; }
+          const json = await resp.json();
+          const tier = json && (json.tier === 'pro' ? 'pro' : 'free');
+          const trialStartDate = json && typeof json.trialStartDate === 'string' ? json.trialStartDate : null;
+          try { chrome.storage.local.set({ userTier: tier, userTrialStartDate: trialStartDate || null }); } catch (_) {}
+          lastEntitlementCheckMs = now;
+          lastEntitlementIsPro = (tier === 'pro');
+          resolve(lastEntitlementIsPro);
+        } catch (_) {
+          lastEntitlementCheckMs = now;
+          lastEntitlementIsPro = false;
+          resolve(false);
+        }
+      });
+    } catch (_) { resolve(false); }
+  });
+}
 
 /**
  * Generate SVG version of the quote
@@ -1003,90 +1010,122 @@ function generateSVGQuote(text, gradient, includeWatermark = true) {
 
 // Message listener for handling requests from preview.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Non-watermarked image generation is a Pro-only capability
   if (request.action === "generateWithoutWatermark") {
-    // Small delay to ensure currentGradient is properly stored
-    setTimeout(() => {
+    verifyProEntitlement().then((isPro) => {
+      if (!isPro) { sendResponse({ ok: false, error: 'pro_required' }); return; }
+      // Small delay to ensure currentGradient is properly stored
+      setTimeout(() => {
+        chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
+          if (data.quoteText && data.customBackgroundImage) {
+            generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
+              sendResponse({ ok: true, imageData });
+            });
+          } else if (data.quoteText && data.currentGradient) {
+            generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
+              sendResponse({ ok: true, imageData });
+            });
+          } else if (data.quoteText) {
+            // Fallback: regenerate with a random gradient if currentGradient is missing
+            generateQuoteImageData(data.quoteText, false).then((imageData) => {
+              sendResponse({ ok: true, imageData });
+            });
+          } else {
+            sendResponse({ ok: false, error: 'no_text' });
+          }
+        });
+      }, 200);
+    });
+    return true; // Keep the message channel open for async response
+  }
+
+  if (request.action === "generateSVG") {
+    const wantsNoWatermark = (request && request.includeWatermark === false);
+    const proceed = () => {
       chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
         if (data.quoteText && data.customBackgroundImage) {
-          generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
-            sendResponse({ imageData: imageData });
+          generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
+            sendResponse({ ok: true, svgData });
           });
         } else if (data.quoteText && data.currentGradient) {
-          generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
-            sendResponse({ imageData: imageData });
+          const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
+          sendResponse({ ok: true, svgData });
+        } else {
+          sendResponse({ ok: false, error: 'no_text' });
+        }
+      });
+    };
+    if (wantsNoWatermark) {
+      verifyProEntitlement().then((isPro) => { if (!isPro) sendResponse({ ok: false, error: 'pro_required' }); else proceed(); });
+    } else {
+      proceed();
+    }
+    return true; // Keep the message channel open for async response
+  }
+
+  if (request.action === "regenerateQuote") {
+    const wantsNoWatermark = !!(request && request.includeWatermark === false);
+    const proceed = () => {
+      chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
+        if (data.customBackgroundImage) {
+          generateQuoteImageDataWithImage(request.text, data.customBackgroundImage, request.includeWatermark).then((imageData) => {
+            chrome.storage.local.set({ quoteImage: imageData });
+            sendResponse({ ok: true, imageData });
           });
-        } else if (data.quoteText) {
-          // Fallback: regenerate with a random gradient if currentGradient is missing
-          generateQuoteImageData(data.quoteText, false).then((imageData) => {
-            sendResponse({ imageData: imageData });
+        } else if (data.currentGradient) {
+          generateQuoteImageDataWithGradient(request.text, data.currentGradient, request.includeWatermark).then((imageData) => {
+            chrome.storage.local.set({ quoteImage: imageData });
+            sendResponse({ ok: true, imageData });
+          });
+        } else {
+          // Fallback: regenerate with new gradient if currentGradient is missing
+          generateQuoteImageData(request.text, request.includeWatermark).then((imageData) => {
+            chrome.storage.local.set({ quoteImage: imageData });
+            sendResponse({ ok: true, imageData });
           });
         }
       });
-    }, 200);
+    };
+    if (wantsNoWatermark) {
+      verifyProEntitlement().then((isPro) => { if (!isPro) sendResponse({ ok: false, error: 'pro_required' }); else proceed(); });
+    } else {
+      proceed();
+    }
     return true; // Keep the message channel open for async response
   }
-  
-  if (request.action === "generateSVG") {
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
-        generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
-          sendResponse({ svgData: svgData });
-        });
-      } else if (data.quoteText && data.currentGradient) {
-        const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
-        sendResponse({ svgData: svgData });
-      }
-    });
-    return true; // Keep the message channel open for async response
-  }
-  
-  if (request.action === "regenerateQuote") {
-    chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
-      if (data.customBackgroundImage) {
-        generateQuoteImageDataWithImage(request.text, data.customBackgroundImage, request.includeWatermark).then((imageData) => {
-          chrome.storage.local.set({ quoteImage: imageData });
-          sendResponse({ imageData: imageData });
-        });
-      } else if (data.currentGradient) {
-        generateQuoteImageDataWithGradient(request.text, data.currentGradient, request.includeWatermark).then((imageData) => {
-          chrome.storage.local.set({ quoteImage: imageData });
-          sendResponse({ imageData: imageData });
-        });
-      } else {
-        // Fallback: regenerate with new gradient if currentGradient is missing
-        generateQuoteImageData(request.text, request.includeWatermark).then((imageData) => {
-          chrome.storage.local.set({ quoteImage: imageData });
-          sendResponse({ imageData: imageData });
-        });
-      }
-    });
-    return true; // Keep the message channel open for async response
-  }
-  
+
   if (request.action === "regenerateWithSettings") {
-    chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
-      const incomingHtml = (request && typeof request.html === 'string' && request.html.trim().length > 0) ? request.html : null;
-      if (data.customBackgroundImage) {
-        const generator = incomingHtml ? generateQuoteImageDataWithImageHtml : generateQuoteImageDataWithImage;
-        generator(incomingHtml || request.text, data.customBackgroundImage, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
-          chrome.storage.local.set({ quoteImage: imageData });
-          sendResponse({ imageData: imageData });
-        });
-      } else if (data.currentGradient) {
-        const generator = incomingHtml ? generateQuoteImageDataWithSettingsHtml : generateQuoteImageDataWithSettings;
-        generator(incomingHtml || request.text, data.currentGradient, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
-          chrome.storage.local.set({ quoteImage: imageData });
-          sendResponse({ imageData: imageData });
-        });
-      } else {
-        // Fallback: regenerate with new gradient if currentGradient is missing
-        const generator = incomingHtml ? generateQuoteImageDataWithSettingsHtml : generateQuoteImageDataWithSettings;
-        generator(incomingHtml || request.text, null, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
-          chrome.storage.local.set({ quoteImage: imageData });
-          sendResponse({ imageData: imageData });
-        });
-      }
-    });
+    const wantsNoWatermark = !!(request && request.includeWatermark === false);
+    const proceed = () => {
+      chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
+        const incomingHtml = (request && typeof request.html === 'string' && request.html.trim().length > 0) ? request.html : null;
+        if (data.customBackgroundImage) {
+          const generator = incomingHtml ? generateQuoteImageDataWithImageHtml : generateQuoteImageDataWithImage;
+          generator(incomingHtml || request.text, data.customBackgroundImage, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+            chrome.storage.local.set({ quoteImage: imageData });
+            sendResponse({ ok: true, imageData });
+          });
+        } else if (data.currentGradient) {
+          const generator = incomingHtml ? generateQuoteImageDataWithSettingsHtml : generateQuoteImageDataWithSettings;
+          generator(incomingHtml || request.text, data.currentGradient, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+            chrome.storage.local.set({ quoteImage: imageData });
+            sendResponse({ ok: true, imageData });
+          });
+        } else {
+          // Fallback: regenerate with new gradient if currentGradient is missing
+          const generator = incomingHtml ? generateQuoteImageDataWithSettingsHtml : generateQuoteImageDataWithSettings;
+          generator(incomingHtml || request.text, null, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+            chrome.storage.local.set({ quoteImage: imageData });
+            sendResponse({ ok: true, imageData });
+          });
+        }
+      });
+    };
+    if (wantsNoWatermark) {
+      verifyProEntitlement().then((isPro) => { if (!isPro) sendResponse({ ok: false, error: 'pro_required' }); else proceed(); });
+    } else {
+      proceed();
+    }
     return true; // Keep the message channel open for async response
   }
 });

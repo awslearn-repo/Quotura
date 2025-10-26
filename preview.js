@@ -989,6 +989,10 @@
     }, (response) => {
       setButtonLoading(downloadSvgBtn, false);
       
+      if (response && response.ok === false && response.error === 'pro_required') {
+        showUpgradeOverlay('Exporting SVG without watermark is a Pro feature.');
+        return;
+      }
       if (response && response.svgData) {
         // Download the SVG file
         chrome.downloads.download({
@@ -1064,6 +1068,10 @@
         }, (response) => {
           setButtonLoading(removeWatermarkBtn, false);
           
+          if (response && response.ok === false && response.error === 'pro_required') {
+            showUpgradeOverlay('Removing watermark is a Pro feature.');
+            return;
+          }
           if (response && response.imageData) {
             // Update current image with watermark-free version
             currentImageData = response.imageData;
@@ -1238,6 +1246,14 @@
       includeWatermark: !watermarkRemoved,
       gradient: currentGradientChoice
     }, (response) => {
+      if (response && response.ok === false && response.error === 'pro_required') {
+        watermarkRemoved = false;
+        showUpgradeOverlay('Removing watermark is a Pro feature.');
+        applyPlanGatingFromStorage();
+        msg.textContent = "Watermark required for Free plan";
+        enableExportButtons();
+        return;
+      }
       if (response && response.imageData) {
         currentImageData = response.imageData;
         img.src = response.imageData;
@@ -1709,6 +1725,15 @@
           includeWatermark: !watermarkRemoved,
           gradient: currentGradientChoice // Pass the current gradient choice
         }, (response) => {
+          if (response && response.ok === false && response.error === 'pro_required') {
+            // Entitlement check failed for no-watermark generation
+            watermarkRemoved = false;
+            showUpgradeOverlay('Removing watermark is a Pro feature.');
+            applyPlanGatingFromStorage();
+            msg.textContent = "Watermark required for Free plan";
+            enableExportButtons();
+            return;
+          }
           if (response && response.imageData) {
             currentImageData = response.imageData;
             img.src = response.imageData;
