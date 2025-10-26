@@ -577,9 +577,9 @@
         logoutBtn.style.display = "inline-block";
         if (resumeAuthBtn) resumeAuthBtn.style.display = 'none';
       } else {
-        // Show explicit status when signed out
-        authStatus.textContent = "You are not signed in.";
-        try { authStatus.style.display = 'block'; } catch (_) {}
+        // Hide auth status when signed out; Login/Sign up buttons indicate state
+        authStatus.textContent = "";
+        try { authStatus.style.display = 'none'; } catch (_) {}
         loginBtn.style.display = "inline-block";
         signupBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
