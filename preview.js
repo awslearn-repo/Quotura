@@ -259,8 +259,23 @@
       const upgradeBtn = document.getElementById('upgradeBtn');
       const editHint = document.getElementById('editHint');
 
-      // Toggle upgrade button visibility
-      if (upgradeBtn) upgradeBtn.style.display = userIsPro ? 'none' : 'inline-block';
+      // Toggle upgrade button visibility — only for signed-in free users
+      const setUpgradeVisibility = (signedIn) => {
+        if (!upgradeBtn) return;
+        upgradeBtn.style.display = (signedIn && !userIsPro) ? 'inline-block' : 'none';
+      };
+      if (isChromeAvailable()) {
+        try {
+          chrome.storage.local.get(['cognitoSignedIn'], (data) => {
+            setUpgradeVisibility(!!(data && data.cognitoSignedIn));
+          });
+        } catch (_) {
+          setUpgradeVisibility(false);
+        }
+      } else {
+        const v = (typeof localStorage !== 'undefined') ? localStorage.getItem('cognitoSignedIn') : 'false';
+        setUpgradeVisibility(v === 'true');
+      }
 
       // Lock/unlock the right editor panel
       if (editPanel) {
@@ -1030,6 +1045,8 @@
    * Remove watermark from image
    */
   function removeWatermark() {
+    // Safety guard: never allow non-Pro users to remove watermark
+    if (!userIsPro) { showUpgradeOverlay('Removing watermark is a Pro feature.'); return; }
     if (watermarkRemoved || !isChromeAvailable()) return;
     
     setButtonLoading(removeWatermarkBtn, true);
