@@ -18,8 +18,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           sendResponse({ ok: false, error: 'missing_token' });
           return;
         }
-        const AWS_REGION = 'us-east-1';
-        const apiUrl = `https://ffngxtofyb.execute-api.${AWS_REGION}.amazonaws.com/user`;
+        const apiUrl = 'https://quotura.imaginetechverse.com/api/user';
         try {
           const resp = await fetch(apiUrl, {
             method: 'GET',

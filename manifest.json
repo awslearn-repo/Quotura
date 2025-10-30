@@ -5,7 +5,7 @@
   "description": "Highlight text, beautify it, and download as an image.",
   "permissions": ["contextMenus", "downloads", "storage", "identity"],
   "host_permissions": [
-    "https://ffngxtofyb.execute-api.us-east-1.amazonaws.com/*"
+    "https://quotura.imaginetechverse.com/api/*"
   ],
   "background": {
     "service_worker": "background.js"
