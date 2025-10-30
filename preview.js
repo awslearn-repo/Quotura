@@ -111,8 +111,7 @@
   };
 
   // Backend API configuration
-  const AWS_REGION = "us-east-1";
-  const API_BASE_URL = `https://ffngxtofyb.execute-api.${AWS_REGION}.amazonaws.com`;
+  const API_BASE_URL = "https://quotura.imaginetechverse.com/api";
   const API_ENDPOINTS = {
     user: `${API_BASE_URL}/user`,
   };
