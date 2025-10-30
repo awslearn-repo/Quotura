@@ -101,6 +101,7 @@
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
   let userIsPro = false;            // Current gating flag
+  let ensuredWatermarkForFree = false; // Ensure watermark once for free tier users
 
   // Centralized Cognito configuration and URL builders
   const COGNITO_CONFIG = {
@@ -312,6 +313,36 @@
 
       // Ensure overlays align after layout changes
       try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
+
+      // Hard-ensure watermark for Free users (once per load)
+      if (!userIsPro && !ensuredWatermarkForFree && isChromeAvailable()) {
+        ensuredWatermarkForFree = true;
+        try {
+          chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
+            const hasText = data && typeof data.quoteText === 'string' && data.quoteText.length > 0;
+            if (!hasText) return;
+            const incomingHtml = (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null;
+            const payload = {
+              action: "regenerateWithSettings",
+              text: data.quoteText,
+              html: incomingHtml,
+              font: currentFont,
+              fontSize: currentFontSize,
+              includeWatermark: true,
+              gradient: currentGradientChoice,
+            };
+            chrome.runtime.sendMessage(payload, (response) => {
+              if (response && response.imageData) {
+                currentImageData = response.imageData;
+                if (img) img.src = response.imageData;
+                watermarkRemoved = false;
+                // Keep export buttons enabled state consistent for free plan
+                enableExportButtons();
+              }
+            });
+          });
+        } catch (_) {}
+      }
     } catch (_) {}
   }
 
