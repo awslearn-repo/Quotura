@@ -102,6 +102,7 @@
   let inlineEditing = false;        // Whether inline editor is visible
   let userIsPro = false;            // Current gating flag
   let ensuredWatermarkForFree = false; // Ensure watermark once for free tier users
+  let startAuthFlowForUpgrade = null;   // Deferred auth launcher for upgrade path
 
   // Centralized Cognito configuration and URL builders
   const COGNITO_CONFIG = {
@@ -116,6 +117,8 @@
   const API_ENDPOINTS = {
     user: `${API_BASE_URL}/user`,
   };
+
+  const UPGRADE_PAGE_URL = "https://quotura.imaginetechverse.com/plans.html";
 
   function buildCognitoAuthUrl(action, config, overrideRedirectUri) {
     const url = new URL(`/${action}`, config.domain);
@@ -222,7 +225,7 @@
       }
       const setGreetingTexts = (name, tier) => {
         const hasName = name && String(name).trim().length > 0;
-        const planSuffix = tier ? (tier === 'pro' ? ' — Pro plan' : ' — Free plan') : '';
+        const planSuffix = tier ? (tier === 'pro' ? ' ? Pro plan' : ' ? Free plan') : '';
         if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}${planSuffix}` : '';
         // Ensure greeting width aligns with image after text updates
         try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
@@ -259,7 +262,7 @@
       const upgradeBtn = document.getElementById('upgradeBtn');
       const editHint = document.getElementById('editHint');
 
-      // Toggle upgrade button visibility — only for signed-in free users
+      // Toggle upgrade button visibility ? only for signed-in free users
       const setUpgradeVisibility = (signedIn) => {
         if (!upgradeBtn) return;
         upgradeBtn.style.display = (signedIn && !userIsPro) ? 'inline-block' : 'none';
@@ -296,9 +299,9 @@
       // Update Remove Watermark button label for free users (keep clickable to show upgrade)
       if (removeWatermarkBtn) {
         if (!userIsPro && !watermarkRemoved) {
-          removeWatermarkBtn.textContent = '🚫 Remove Watermark (Pro)';
+          removeWatermarkBtn.textContent = '?? Remove Watermark (Pro)';
         } else if (!watermarkRemoved) {
-          removeWatermarkBtn.textContent = '🚫 Remove Watermark';
+          removeWatermarkBtn.textContent = '?? Remove Watermark';
         }
       }
 
@@ -630,7 +633,7 @@
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
 
       // Optional: brief status overlay while the popup opens
-      showAuthOverlay('Opening secure sign-in…');
+      showAuthOverlay('Opening secure sign-in?');
 
       // Open a placeholder popup synchronously to avoid popup blockers
       let popupRef = null;
@@ -659,7 +662,7 @@
               } catch (_) {
                 window.location.href = fallbackAuthUrl;
               }
-              if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+              if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window?';
               try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
               // Reveal manual open button in case popup was blocked or needs user action
               try { if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
@@ -709,9 +712,11 @@
       } catch (_) {
         window.location.href = fallbackAuthUrl;
       }
-      if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window…';
+      if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window?';
       try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
     }
+
+    startAuthFlowForUpgrade = startCognitoAuthFlow;
 
     function getLogoutUrl() {
       return buildCognitoLogoutUrl(COGNITO_CONFIG);
@@ -770,7 +775,7 @@
             chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
               const shouldShow = !!(data && data.pendingAuthFlow && data.pendingAuthVisible);
               resumeAuthBtn.style.display = shouldShow ? 'inline-block' : 'none';
-              resumeAuthBtn.textContent = data && data.pendingAuthFlow === 'signup' ? '🔁 Resume sign-up' : '🔁 Resume sign-in';
+              resumeAuthBtn.textContent = data && data.pendingAuthFlow === 'signup' ? '?? Resume sign-up' : '?? Resume sign-in';
             });
           } catch (_) {}
         }
@@ -882,11 +887,11 @@
         try {
           chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
             if (data && data.pendingAuthFlow && data.pendingAuthVisible) {
-              const text = data.pendingAuthFlow === 'signup' ? 'Please complete sign-up in the popup…' : 'Please complete sign-in in the popup…';
+              const text = data.pendingAuthFlow === 'signup' ? 'Please complete sign-up in the popup?' : 'Please complete sign-in in the popup?';
               showAuthOverlay(text);
               if (resumeAuthBtn) {
                 resumeAuthBtn.style.display = 'inline-block';
-                resumeAuthBtn.textContent = data.pendingAuthFlow === 'signup' ? '🔁 Resume sign-up' : '🔁 Resume sign-in';
+                resumeAuthBtn.textContent = data.pendingAuthFlow === 'signup' ? '?? Resume sign-up' : '?? Resume sign-in';
               }
             }
           });
@@ -959,7 +964,7 @@
     // Only Pro users can click Remove Watermark and only until it's removed
     removeWatermarkBtn.disabled = (!userIsPro) || watermarkRemoved;
     if (watermarkRemoved) {
-      removeWatermarkBtn.textContent = "✅ Watermark Removed";
+      removeWatermarkBtn.textContent = "? Watermark Removed";
       removeWatermarkBtn.classList.remove("btn-warning");
       removeWatermarkBtn.classList.add("btn-success");
     }
@@ -985,7 +990,7 @@
       button.classList.add("btn-loading");
       button.disabled = true;
       button.dataset.originalText = button.textContent;
-      button.textContent = "⏳ Loading...";
+      button.textContent = "? Loading...";
     } else {
       button.classList.remove("btn-loading");
       button.disabled = false;
@@ -1066,7 +1071,7 @@
       
       // Temporarily change button text to show success
       const originalText = copyImageBtn.textContent;
-      copyImageBtn.textContent = "✅ Copied!";
+      copyImageBtn.textContent = "? Copied!";
       
       setTimeout(() => {
         copyImageBtn.textContent = originalText;
@@ -1109,7 +1114,7 @@
             watermarkRemoved = true;
             
             // Update UI to reflect watermark removal
-            removeWatermarkBtn.textContent = "✅ Watermark Removed";
+            removeWatermarkBtn.textContent = "? Watermark Removed";
             removeWatermarkBtn.disabled = true;
             removeWatermarkBtn.classList.remove("btn-warning");
             removeWatermarkBtn.classList.add("btn-success");
@@ -1182,13 +1187,13 @@
       <div class="support-backdrop"></div>
       <div class="support-container">
         <div class="support-header">
-          <h3>💛 Support Quotura</h3>
-          <button class="close-btn">✕</button>
+          <h3>?? Support Quotura</h3>
+          <button class="close-btn">?</button>
         </div>
         <div class="support-content">
-          <p class="support-message"><strong>Quotura</strong> is a fast, no-frills text-to-quote tool that saves time creating and sharing beautiful quotes. It’s free to use, and your support helps keep it running and improving ☕💛.</p>
+          <p class="support-message"><strong>Quotura</strong> is a fast, no-frills text-to-quote tool that saves time creating and sharing beautiful quotes. It?s free to use, and your support helps keep it running and improving ???.</p>
           <a href="https://ko-fi.com/s/b5f0dccba5" target="_blank" rel="noopener" class="support-cta-btn">You're Awesome</a>
-          <div class="support-note">No pressure — you can still remove the watermark even if you don’t pay.</div>
+          <div class="support-note">No pressure ? you can still remove the watermark even if you don?t pay.</div>
         </div>
       </div>
     `;
@@ -1472,7 +1477,7 @@
       <div class="font-picker-container">
         <div class="font-picker-header">
           <h3>Choose Font Style</h3>
-          <button class="close-btn">✕</button>
+          <button class="close-btn">?</button>
         </div>
         <div class="font-options">
           ${fonts.map((font, index) => `
@@ -1482,7 +1487,7 @@
                 <div class="font-desc">${font.description}</div>
               </div>
               <div class="font-sample" style="font-family: ${font.name}">${font.sample}</div>
-              <div class="select-indicator">✓</div>
+              <div class="select-indicator">?</div>
             </div>
           `).join('')}
         </div>
@@ -1564,9 +1569,9 @@
     const optionsHTML = [
       `<div class="gradient-option upload-option" data-upload="true">
         <div class="gradient-swatch" style="display:flex;align-items:center;justify-content:center;background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.15)); color:#333; font-weight:700;">
-          📁 Upload from device…
+          ?? Upload from device?
         </div>
-        <div class="gradient-name">Upload from device…</div>
+        <div class="gradient-name">Upload from device?</div>
       </div>`,
       `<div class="gradient-option random-option" data-colors="random">
         <div class="gradient-swatch" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)">RANDOM</div>
@@ -1585,7 +1590,7 @@
       <div class="gradient-picker-container">
         <div class="gradient-picker-header">
           <h3>Choose Background</h3>
-          <button class="close-btn">✕</button>
+          <button class="close-btn">?</button>
         </div>
         <div class="gradient-grid">
           ${optionsHTML}
@@ -1904,9 +1909,95 @@
     } catch (_) {}
   }
 
-  if (upgradeBtn) upgradeBtn.addEventListener('click', () => showUpgradeOverlay('Unlock Pro features.'));
+  async function isUserSignedIn() {
+    try {
+      if (isChromeAvailable()) {
+        return await new Promise((resolve) => {
+          try {
+            chrome.storage.local.get(['cognitoSignedIn'], (data) => {
+              resolve(!!(data && data.cognitoSignedIn));
+            });
+          } catch (_) {
+            resolve(false);
+          }
+        });
+      }
+      if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem('cognitoSignedIn') === 'true';
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  async function buildUpgradeUrlWithToken() {
+    try {
+      const url = new URL(UPGRADE_PAGE_URL);
+      const storedToken = await getIdTokenFromStorage();
+      if (typeof storedToken === 'string' && storedToken.trim().length > 0) {
+        url.searchParams.set('token', storedToken);
+      }
+      return url.toString();
+    } catch (_) {
+      return UPGRADE_PAGE_URL;
+    }
+  }
+
+  async function openUpgradePage() {
+    const targetUrl = await buildUpgradeUrlWithToken();
+    const openInWindow = (url) => {
+      try {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch (_) {}
+    };
+
+    if (isChromeAvailable() && chrome.tabs && typeof chrome.tabs.create === 'function') {
+      try {
+        chrome.tabs.create({ url: targetUrl }, () => {
+          if (chrome.runtime && chrome.runtime.lastError) {
+            openInWindow(targetUrl);
+          }
+        });
+        return;
+      } catch (_) {
+        openInWindow(targetUrl);
+        return;
+      }
+    }
+
+    openInWindow(targetUrl);
+  }
+
+  function handleUpgradeButtonClick(event) {
+    try {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    } catch (_) {}
+    hideUpgradeOverlay();
+    isUserSignedIn()
+      .then((signedIn) => {
+        if (!signedIn) {
+          if (typeof startAuthFlowForUpgrade === 'function') {
+            startAuthFlowForUpgrade('login');
+          } else if (loginBtn && typeof loginBtn.click === 'function') {
+            try { loginBtn.click(); } catch (_) {}
+          } else {
+            try {
+              window.open(buildCognitoAuthUrl('signup', COGNITO_CONFIG), '_blank', 'noopener,noreferrer');
+            } catch (_) {}
+          }
+          return;
+        }
+        openUpgradePage().catch(() => {});
+      })
+      .catch(() => {
+        if (typeof startAuthFlowForUpgrade === 'function') {
+          startAuthFlowForUpgrade('login');
+        }
+      });
+  }
+
+  if (upgradeBtn) upgradeBtn.addEventListener('click', handleUpgradeButtonClick);
   if (upgradeCloseBtn) upgradeCloseBtn.addEventListener('click', hideUpgradeOverlay);
-  if (upgradeStartBtn) upgradeStartBtn.addEventListener('click', () => { hideUpgradeOverlay(); showNotification('Upgrade flow coming soon.', 'info'); });
+  if (upgradeStartBtn) upgradeStartBtn.addEventListener('click', handleUpgradeButtonClick);
   if (editPanelLock) editPanelLock.addEventListener('click', () => showUpgradeOverlay('The editor is locked. Upgrade to Pro.'));
 
   // Apply gating immediately on load
