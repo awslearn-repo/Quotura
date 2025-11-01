@@ -102,6 +102,7 @@
   let inlineEditing = false;        // Whether inline editor is visible
   let userIsPro = false;            // Current gating flag
   let ensuredWatermarkForFree = false; // Ensure watermark once for free tier users
+  let startAuthFlowForUpgrade = null;   // Deferred auth launcher for upgrade path
 
   // Centralized Cognito configuration and URL builders
   const COGNITO_CONFIG = {
@@ -714,6 +715,8 @@
       if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window?';
       try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
     }
+
+    startAuthFlowForUpgrade = startCognitoAuthFlow;
 
     function getLogoutUrl() {
       return buildCognitoLogoutUrl(COGNITO_CONFIG);
@@ -1906,6 +1909,26 @@
     } catch (_) {}
   }
 
+  async function isUserSignedIn() {
+    try {
+      if (isChromeAvailable()) {
+        return await new Promise((resolve) => {
+          try {
+            chrome.storage.local.get(['cognitoSignedIn'], (data) => {
+              resolve(!!(data && data.cognitoSignedIn));
+            });
+          } catch (_) {
+            resolve(false);
+          }
+        });
+      }
+      if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem('cognitoSignedIn') === 'true';
+      }
+    } catch (_) {}
+    return false;
+  }
+
   async function buildUpgradeUrlWithToken() {
     try {
       const url = new URL(UPGRADE_PAGE_URL);
@@ -1949,7 +1972,27 @@
       if (event && typeof event.preventDefault === 'function') event.preventDefault();
     } catch (_) {}
     hideUpgradeOverlay();
-    openUpgradePage().catch(() => {});
+    isUserSignedIn()
+      .then((signedIn) => {
+        if (!signedIn) {
+          if (typeof startAuthFlowForUpgrade === 'function') {
+            startAuthFlowForUpgrade('login');
+          } else if (loginBtn && typeof loginBtn.click === 'function') {
+            try { loginBtn.click(); } catch (_) {}
+          } else {
+            try {
+              window.open(buildCognitoAuthUrl('signup', COGNITO_CONFIG), '_blank', 'noopener,noreferrer');
+            } catch (_) {}
+          }
+          return;
+        }
+        openUpgradePage().catch(() => {});
+      })
+      .catch(() => {
+        if (typeof startAuthFlowForUpgrade === 'function') {
+          startAuthFlowForUpgrade('login');
+        }
+      });
   }
 
   if (upgradeBtn) upgradeBtn.addEventListener('click', handleUpgradeButtonClick);
