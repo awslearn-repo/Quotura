@@ -116,6 +116,7 @@
   const API_BASE_URL = "https://quotura.imaginetechverse.com/api";
   const API_ENDPOINTS = {
     user: `${API_BASE_URL}/user`,
+    createTempSession: `${API_BASE_URL}/create-temp-session`,
   };
 
   const UPGRADE_PAGE_URL = "https://quotura.imaginetechverse.com/plans.html";
@@ -1909,62 +1910,60 @@
     } catch (_) {}
   }
 
-  async function isUserSignedIn() {
+  async function createTempSessionAndOpenUpgrade() {
     try {
-      if (isChromeAvailable()) {
-        return await new Promise((resolve) => {
-          try {
-            chrome.storage.local.get(['cognitoSignedIn'], (data) => {
-              resolve(!!(data && data.cognitoSignedIn));
-            });
-          } catch (_) {
-            resolve(false);
-          }
-        });
-      }
-      if (typeof localStorage !== 'undefined') {
-        return localStorage.getItem('cognitoSignedIn') === 'true';
-      }
-    } catch (_) {}
-    return false;
-  }
-
-  async function buildUpgradeUrlWithToken() {
-    try {
-      const url = new URL(UPGRADE_PAGE_URL);
-      const storedToken = await getIdTokenFromStorage();
-      if (typeof storedToken === 'string' && storedToken.trim().length > 0) {
-        url.searchParams.set('token', storedToken);
-      }
-      return url.toString();
-    } catch (_) {
-      return UPGRADE_PAGE_URL;
-    }
-  }
-
-  async function openUpgradePage() {
-    const targetUrl = await buildUpgradeUrlWithToken();
-    const openInWindow = (url) => {
-      try {
-        window.open(url, '_blank', 'noopener,noreferrer');
-      } catch (_) {}
-    };
-
-    if (isChromeAvailable() && chrome.tabs && typeof chrome.tabs.create === 'function') {
-      try {
-        chrome.tabs.create({ url: targetUrl }, () => {
-          if (chrome.runtime && chrome.runtime.lastError) {
-            openInWindow(targetUrl);
-          }
-        });
+      const idToken = await getIdTokenFromStorage();
+      if (typeof idToken !== 'string' || idToken.trim().length === 0) {
+        showNotification('Login required to upgrade', 'error');
+        if (typeof startAuthFlowForUpgrade === 'function') {
+          try { startAuthFlowForUpgrade('login'); } catch (_) {}
+        }
         return;
+      }
+
+      let response;
+      try {
+        response = await fetch(API_ENDPOINTS.createTempSession, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            Accept: 'application/json',
+          },
+          credentials: 'omit',
+          cache: 'no-store',
+        });
       } catch (_) {
-        openInWindow(targetUrl);
+        showNotification('Login required to upgrade', 'error');
         return;
       }
-    }
 
-    openInWindow(targetUrl);
+      if (!response || !response.ok) {
+        showNotification('Login required to upgrade', 'error');
+        return;
+      }
+
+      let sessionId = null;
+      try {
+        const payload = await response.json();
+        if (payload && typeof payload === 'object') {
+          sessionId = payload.sessionId || payload.session || payload.id || payload.sessionID || null;
+        }
+      } catch (_) {}
+
+      if (!sessionId || typeof sessionId !== 'string') {
+        showNotification('Login required to upgrade', 'error');
+        return;
+      }
+
+      const upgradeUrl = `${UPGRADE_PAGE_URL}?session=${encodeURIComponent(sessionId)}`;
+      try {
+        window.open(upgradeUrl, '_blank');
+      } catch (_) {
+        showNotification('Login required to upgrade', 'error');
+      }
+    } catch (_) {
+      showNotification('Login required to upgrade', 'error');
+    }
   }
 
   function handleUpgradeButtonClick(event) {
@@ -1972,27 +1971,7 @@
       if (event && typeof event.preventDefault === 'function') event.preventDefault();
     } catch (_) {}
     hideUpgradeOverlay();
-    isUserSignedIn()
-      .then((signedIn) => {
-        if (!signedIn) {
-          if (typeof startAuthFlowForUpgrade === 'function') {
-            startAuthFlowForUpgrade('login');
-          } else if (loginBtn && typeof loginBtn.click === 'function') {
-            try { loginBtn.click(); } catch (_) {}
-          } else {
-            try {
-              window.open(buildCognitoAuthUrl('signup', COGNITO_CONFIG), '_blank', 'noopener,noreferrer');
-            } catch (_) {}
-          }
-          return;
-        }
-        openUpgradePage().catch(() => {});
-      })
-      .catch(() => {
-        if (typeof startAuthFlowForUpgrade === 'function') {
-          startAuthFlowForUpgrade('login');
-        }
-      });
+    createTempSessionAndOpenUpgrade();
   }
 
   if (upgradeBtn) upgradeBtn.addEventListener('click', handleUpgradeButtonClick);
