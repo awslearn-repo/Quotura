@@ -1408,38 +1408,38 @@
   /**
    * Create beautiful font picker modal
    */
-  function createFontPickerModal() {
-    const fonts = [
-      { name: "Arial", display: "Arial", description: "Clean & Professional", sample: "The quick brown fox jumps" },
-      { name: "Georgia", display: "Georgia", description: "Elegant Serif", sample: "The quick brown fox jumps" },
-      { name: "Helvetica", display: "Helvetica", description: "Modern Classic", sample: "The quick brown fox jumps" },
-      { name: "Times New Roman", display: "Times", description: "Traditional Serif", sample: "The quick brown fox jumps" },
-      { name: "Verdana", display: "Verdana", description: "Clear & Readable", sample: "The quick brown fox jumps" }
-    ];
-    
-    const modal = document.createElement('div');
-    modal.className = 'font-picker-modal';
-    modal.innerHTML = `
-      <div class="font-picker-backdrop"></div>
-      <div class="font-picker-container">
-        <div class="font-picker-header">
-          <h3>Choose Font Style</h3>
-          <button class="close-btn">?</button>
-        </div>
-        <div class="font-options">
-          ${fonts.map((font, index) => `
-            <div class="font-option ${font.name === currentFont ? 'selected' : ''}" data-font="${font.name}">
-              <div class="font-info">
-                <div class="font-name" style="font-family: ${font.name}">${font.display}</div>
-                <div class="font-desc">${font.description}</div>
+    function createFontPickerModal() {
+      const fonts = [
+        { name: "Arial", display: "Arial", description: "Clean & Professional", sample: "The quick brown fox jumps" },
+        { name: "Georgia", display: "Georgia", description: "Elegant Serif", sample: "The quick brown fox jumps" },
+        { name: "Helvetica", display: "Helvetica", description: "Modern Classic", sample: "The quick brown fox jumps" },
+        { name: "Times New Roman", display: "Times", description: "Traditional Serif", sample: "The quick brown fox jumps" },
+        { name: "Verdana", display: "Verdana", description: "Clear & Readable", sample: "The quick brown fox jumps" }
+      ];
+
+      const modal = document.createElement('div');
+      modal.className = 'font-picker-modal';
+      modal.innerHTML = `
+        <div class="font-picker-backdrop"></div>
+        <div class="font-picker-container">
+          <div class="font-picker-header">
+            <h3>Choose Font Style</h3>
+            <button class="close-btn" aria-label="Close">X</button>
+          </div>
+          <div class="font-options">
+            ${fonts.map((font, index) => `
+              <div class="font-option ${font.name === currentFont ? 'selected' : ''}" data-font="${font.name}">
+                <div class="font-info">
+                  <div class="font-name" style="font-family: ${font.name}">${font.display}</div>
+                  <div class="font-desc">${font.description}</div>
+                </div>
+                <div class="font-sample" style="font-family: ${font.name}">${font.sample}</div>
+                <div class="select-indicator">?</div>
               </div>
-              <div class="font-sample" style="font-family: ${font.name}">${font.sample}</div>
-              <div class="select-indicator">?</div>
-            </div>
-          `).join('')}
+            `).join('')}
+          </div>
         </div>
-      </div>
-    `;
+      `;
     
     // Add event listeners
     const closeBtn = modal.querySelector('.close-btn');
@@ -1510,40 +1510,40 @@
       { name: "Pastel", colors: ["#fddb92", "#d1fdff"] },
     ];
     
-    const modal = document.createElement('div');
-    modal.className = 'gradient-picker-modal';
-    
-    const optionsHTML = [
-      `<div class="gradient-option upload-option" data-upload="true">
-        <div class="gradient-swatch" style="display:flex;align-items:center;justify-content:center;background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.15)); color:#333; font-weight:700;">
-          ?? Upload from device?
+      const modal = document.createElement('div');
+      modal.className = 'gradient-picker-modal';
+
+      const optionsHTML = [
+        `<div class="gradient-option upload-option" data-upload="true">
+          <div class="gradient-swatch" style="display:flex;align-items:center;justify-content:center;background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.15)); color:#333; font-weight:700;">
+            Upload from device
+          </div>
+          <div class="gradient-name">Custom image</div>
+        </div>`,
+        `<div class="gradient-option random-option" data-colors="random">
+          <div class="gradient-swatch" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)">RANDOM</div>
+          <div class="gradient-name">Random</div>
+        </div>`,
+        ...gradients.map(g => `
+          <div class="gradient-option" data-colors='${JSON.stringify(g.colors)}'>
+            <div class="gradient-swatch" style="background: linear-gradient(135deg, ${g.colors[0]} 0%, ${g.colors[1]} 100%)"></div>
+            <div class="gradient-name">${g.name}</div>
+          </div>
+        `)
+      ].join('');
+
+      modal.innerHTML = `
+        <div class="gradient-picker-backdrop"></div>
+        <div class="gradient-picker-container">
+          <div class="gradient-picker-header">
+            <h3>Choose Background</h3>
+            <button class="close-btn" aria-label="Close">X</button>
+          </div>
+          <div class="gradient-grid">
+            ${optionsHTML}
+          </div>
         </div>
-        <div class="gradient-name">Upload from device?</div>
-      </div>`,
-      `<div class="gradient-option random-option" data-colors="random">
-        <div class="gradient-swatch" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)">RANDOM</div>
-        <div class="gradient-name">Random</div>
-      </div>`,
-      ...gradients.map(g => `
-        <div class="gradient-option" data-colors='${JSON.stringify(g.colors)}'>
-          <div class="gradient-swatch" style="background: linear-gradient(135deg, ${g.colors[0]} 0%, ${g.colors[1]} 100%)"></div>
-          <div class="gradient-name">${g.name}</div>
-        </div>
-      `)
-    ].join('');
-    
-    modal.innerHTML = `
-      <div class="gradient-picker-backdrop"></div>
-      <div class="gradient-picker-container">
-        <div class="gradient-picker-header">
-          <h3>Choose Background</h3>
-          <button class="close-btn">?</button>
-        </div>
-        <div class="gradient-grid">
-          ${optionsHTML}
-        </div>
-      </div>
-    `;
+      `;
     
     const closeBtn = modal.querySelector('.close-btn');
     const backdrop = modal.querySelector('.gradient-picker-backdrop');
