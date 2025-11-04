@@ -322,10 +322,11 @@
       if (!userIsPro && !ensuredWatermarkForFree && isChromeAvailable()) {
         ensuredWatermarkForFree = true;
         try {
-          chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
-            const hasText = data && typeof data.quoteText === 'string' && data.quoteText.length > 0;
-            if (!hasText) return;
-            const incomingHtml = (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null;
+            chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
+              const hasText = data && typeof data.quoteText === 'string' && data.quoteText.length > 0;
+              if (!hasText) return;
+              const rawHtml = (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null;
+              const incomingHtml = rawHtml ? normalizeBoldMarkup(rawHtml) : null;
             const payload = {
               action: "regenerateWithSettings",
               text: data.quoteText,
@@ -1096,12 +1097,14 @@
     setButtonLoading(removeWatermarkBtn, true);
     
     // Use current font and size settings when removing watermark
-    chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
-      if (data.quoteText) {
-        chrome.runtime.sendMessage({
-          action: "regenerateWithSettings",
-          text: data.quoteText,
-          html: (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null,
+      chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
+        if (data.quoteText) {
+          const rawHtml = (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null;
+          const normalizedHtml = rawHtml ? normalizeBoldMarkup(rawHtml) : null;
+          chrome.runtime.sendMessage({
+            action: "regenerateWithSettings",
+            text: data.quoteText,
+            html: normalizedHtml,
           font: currentFont,
           fontSize: currentFontSize,
           includeWatermark: false
@@ -1208,6 +1211,66 @@
       .replace(/"/g, '&quot;');
   }
 
+    function stripFontWeightFromStyle(styleValue) {
+      const response = { cleaned: '', isBold: false };
+      if (typeof styleValue !== 'string' || styleValue.length === 0) {
+        return response;
+      }
+      const segments = styleValue.split(';');
+      const keep = [];
+      for (const segment of segments) {
+        const trimmed = segment.trim();
+        if (!trimmed) continue;
+        const colonIndex = trimmed.indexOf(':');
+        if (colonIndex === -1) {
+          keep.push(trimmed);
+          continue;
+        }
+        const prop = trimmed.slice(0, colonIndex).trim().toLowerCase();
+        const rawValue = trimmed.slice(colonIndex + 1).trim();
+        if (prop === 'font-weight') {
+          const value = rawValue.replace(/\s*!important\s*$/i, '').trim().toLowerCase();
+          if (/^(bold|bolder|[5-9]00)$/.test(value)) {
+            response.isBold = true;
+            continue;
+          }
+        }
+        keep.push(trimmed);
+      }
+      response.cleaned = keep.join('; ');
+      return response;
+    }
+
+    function normalizeBoldMarkup(html) {
+      if (typeof html !== 'string' || html.length === 0) return html;
+      if (!/font-weight/i.test(html)) return html;
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+      const elements = temp.querySelectorAll('*');
+      elements.forEach((el) => {
+        if (!el || !el.tagName) return;
+        const tagName = el.tagName.toLowerCase();
+        if (tagName === 'style' || tagName === 'script') return;
+        const styleAttr = el.getAttribute('style');
+        if (!styleAttr) return;
+        const { cleaned, isBold } = stripFontWeightFromStyle(styleAttr);
+        if (cleaned && cleaned.length > 0) {
+          if (cleaned !== styleAttr) el.setAttribute('style', cleaned);
+        } else {
+          el.removeAttribute('style');
+        }
+        if (!isBold) return;
+        if (tagName === 'strong' || tagName === 'b') return;
+        if (el.childNodes.length === 0) return;
+        const strongEl = document.createElement('strong');
+        while (el.firstChild) {
+          strongEl.appendChild(el.firstChild);
+        }
+        el.appendChild(strongEl);
+      });
+      return temp.innerHTML;
+    }
+
   // Debounced regenerate to keep typing responsive
   function debounceRegenerateWithNewText() {
     if (regenerateDebounceId) clearTimeout(regenerateDebounceId);
@@ -1289,23 +1352,24 @@
     }
   }
 
-  function toggleCommand(command) {
-    try {
-      if (!userIsPro) { showUpgradeOverlay('Text formatting is a Pro feature.'); return; }
-      ensureInlineEditorOpen();
-      // Use deprecated execCommand for simplicity; widely supported for contentEditable
-      document.execCommand(command, false, null);
-      // Persist content and refresh image
-      const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
-      const newHtml = inlineEditor.innerHTML || '';
-      currentText = newText;
-      currentTextHtml = newHtml;
-      if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText, quoteTextHtml: newHtml });
-      debounceRegenerateWithNewText();
-      updateActiveFormatButtons();
-      inlineEditor.focus();
-    } catch (_) {}
-  }
+    function toggleCommand(command) {
+      try {
+        if (!userIsPro) { showUpgradeOverlay('Text formatting is a Pro feature.'); return; }
+        ensureInlineEditorOpen();
+        // Use deprecated execCommand for simplicity; widely supported for contentEditable
+        document.execCommand(command, false, null);
+        // Persist content and refresh image
+        const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
+        const newHtml = inlineEditor.innerHTML || '';
+        const normalizedHtml = normalizeBoldMarkup(newHtml);
+        currentText = newText;
+        currentTextHtml = normalizedHtml;
+        if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText, quoteTextHtml: normalizedHtml });
+        debounceRegenerateWithNewText();
+        updateActiveFormatButtons();
+        inlineEditor.focus();
+      } catch (_) {}
+    }
 
   function updateActiveFormatButtons() {
     try {
@@ -1336,9 +1400,13 @@
           ? currentText
           : ((data && data.quoteText) || "");
 
-        if (preferredHtml) {
-          inlineEditor.innerHTML = preferredHtml;
-          currentTextHtml = preferredHtml;
+          if (preferredHtml) {
+            const normalizedHtml = normalizeBoldMarkup(preferredHtml);
+            inlineEditor.innerHTML = normalizedHtml;
+            currentTextHtml = normalizedHtml;
+            if (normalizedHtml !== preferredHtml && isChromeAvailable()) {
+              chrome.storage.local.set({ quoteTextHtml: normalizedHtml });
+            }
         } else {
           inlineEditor.textContent = preferredText;
           currentTextHtml = null;
@@ -1690,15 +1758,17 @@
       msg.textContent = "Settings updated (preview only)";
       return;
     }
-    chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
-      if (data.quoteText) {
-        msg.textContent = "Updating with new settings...";
-        disableExportButtons();
-        
-        chrome.runtime.sendMessage({
-          action: "regenerateWithSettings",
-          text: data.quoteText,
-          html: (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null,
+      chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
+        if (data.quoteText) {
+          msg.textContent = "Updating with new settings...";
+          disableExportButtons();
+          const rawHtml = (typeof data.quoteTextHtml === 'string' && data.quoteTextHtml.length > 0) ? data.quoteTextHtml : null;
+          const normalizedHtml = rawHtml ? normalizeBoldMarkup(rawHtml) : null;
+          
+          chrome.runtime.sendMessage({
+            action: "regenerateWithSettings",
+            text: data.quoteText,
+            html: normalizedHtml,
           font: currentFont,
           fontSize: currentFontSize,
           includeWatermark: !watermarkRemoved,
@@ -1725,8 +1795,9 @@
     // If inline editor is open, persist the latest text (including newlines)
     // and trigger a final regenerate before closing the editor
     if (inlineEditing && inlineEditor) {
-      const finalText = (inlineEditor.innerText || "").replace(/\r\n/g, '\n');
-      const finalHtml = inlineEditor.innerHTML || '';
+        const finalText = (inlineEditor.innerText || "").replace(/\r\n/g, '\n');
+        const finalHtmlRaw = inlineEditor.innerHTML || '';
+        const finalHtml = normalizeBoldMarkup(finalHtmlRaw);
       currentText = finalText;
       currentTextHtml = finalHtml;
       if (isChromeAvailable()) chrome.storage.local.set({ quoteText: finalText, quoteTextHtml: finalHtml });
@@ -1770,10 +1841,11 @@
   img.addEventListener("click", handleQuickEdit);
   
   // Inline editor live update
-  inlineEditor.addEventListener('input', () => {
+    inlineEditor.addEventListener('input', () => {
     if (!userIsPro) { showUpgradeOverlay('Editing text is a Pro feature.'); return; }
     const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
-    const newHtml = inlineEditor.innerHTML || '';
+      const newHtmlRaw = inlineEditor.innerHTML || '';
+      const newHtml = normalizeBoldMarkup(newHtmlRaw);
     currentText = newText;
     currentTextHtml = newHtml;
     if (isChromeAvailable()) chrome.storage.local.set({ quoteText: newText, quoteTextHtml: newHtml });
