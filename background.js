@@ -587,7 +587,6 @@ function parseSimpleHtmlToTokens(htmlString) {
   let bold = false;
   let italic = false;
   let underline = false;
-  const formatStack = [];
 
   function pushText(text) {
     if (!text) return;
@@ -601,75 +600,6 @@ function parseSimpleHtmlToTokens(htmlString) {
         tokens.push({ text: '\n', bold: false, italic: false, underline: false, isNewline: true });
       }
     });
-  }
-
-  function pushFormatState(tag) {
-    formatStack.push({ tag, bold, italic, underline });
-  }
-
-  function restoreFormatState(tag) {
-    for (let idx = formatStack.length - 1; idx >= 0; idx--) {
-      const entry = formatStack[idx];
-      if (entry.tag === tag) {
-        bold = entry.bold;
-        italic = entry.italic;
-        underline = entry.underline;
-        formatStack.splice(idx, 1);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  function parseStyleMap(rawTag) {
-    const match = rawTag.match(/style\s*=\s*(["'])(.*?)\1/i);
-    if (!match) return null;
-    const styleString = match[2];
-    if (!styleString) return null;
-    const map = {};
-    styleString.split(';').forEach((rule) => {
-      const [propRaw, valueRaw] = rule.split(':');
-      if (!propRaw || !valueRaw) return;
-      const prop = propRaw.trim().toLowerCase();
-      if (!prop) return;
-      const value = valueRaw.trim().toLowerCase();
-      map[prop] = value;
-    });
-    return map;
-  }
-
-  function styleSetsBold(value) {
-    if (!value) return false;
-    if (value.includes('bold')) return true;
-    const numeric = parseInt(value, 10);
-    return Number.isFinite(numeric) && numeric >= 600;
-  }
-
-  function styleSetsItalic(value) {
-    if (!value) return false;
-    return value.includes('italic') || value.includes('oblique');
-  }
-
-  function styleSetsUnderline(value) {
-    if (!value) return false;
-    return value.includes('underline');
-  }
-
-  function styleClearsBold(value) {
-    if (!value) return false;
-    if (value.includes('normal') || value.includes('lighter')) return true;
-    const numeric = parseInt(value, 10);
-    return Number.isFinite(numeric) && numeric > 0 && numeric < 600;
-  }
-
-  function styleClearsItalic(value) {
-    if (!value) return false;
-    return value.includes('normal');
-  }
-
-  function styleClearsUnderline(value) {
-    if (!value) return false;
-    return value.includes('none');
   }
 
   while (i < src.length) {
@@ -692,52 +622,15 @@ function parseSimpleHtmlToTokens(htmlString) {
       const isClosing = tag.startsWith('/');
 
       if (name === 'b' || name === 'strong') {
-        if (!isClosing) {
-          pushFormatState(name);
-          bold = true;
-        } else {
-          restoreFormatState(name);
-        }
+        bold = !isClosing ? true : false;
         continue;
       }
       if (name === 'i' || name === 'em') {
-        if (!isClosing) {
-          pushFormatState(name);
-          italic = true;
-        } else {
-          restoreFormatState(name);
-        }
+        italic = !isClosing ? true : false;
         continue;
       }
       if (name === 'u') {
-        if (!isClosing) {
-          pushFormatState(name);
-          underline = true;
-        } else {
-          restoreFormatState(name);
-        }
-        continue;
-      }
-      if (name === 'span' || name === 'font') {
-        if (!isClosing) {
-          const styleMap = parseStyleMap(rawTag);
-          pushFormatState(name);
-          if (styleMap) {
-            const weight = styleMap['font-weight'];
-            if (styleSetsBold(weight)) bold = true;
-            else if (styleClearsBold(weight)) bold = false;
-
-            const fontStyle = styleMap['font-style'];
-            if (styleSetsItalic(fontStyle)) italic = true;
-            else if (styleClearsItalic(fontStyle)) italic = false;
-
-            const textDecoration = styleMap['text-decoration'] || styleMap['text-decoration-line'];
-            if (styleSetsUnderline(textDecoration)) underline = true;
-            else if (styleClearsUnderline(textDecoration)) underline = false;
-          }
-        } else {
-          restoreFormatState(name);
-        }
+        underline = !isClosing ? true : false;
         continue;
       }
       if (name === 'br') {
