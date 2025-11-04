@@ -226,7 +226,7 @@
       }
       const setGreetingTexts = (name, tier) => {
         const hasName = name && String(name).trim().length > 0;
-        const planSuffix = tier ? (tier === 'pro' ? ' ? Pro plan' : ' ? Free plan') : '';
+        const planSuffix = tier ? (tier === 'pro' ? ' - Pro plan' : ' - Free plan') : '';
         if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}${planSuffix}` : '';
         // Ensure greeting width aligns with image after text updates
         try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
@@ -300,9 +300,9 @@
       // Update Remove Watermark button label for free users (keep clickable to show upgrade)
       if (removeWatermarkBtn) {
         if (!userIsPro && !watermarkRemoved) {
-          removeWatermarkBtn.textContent = '?? Remove Watermark (Pro)';
+          removeWatermarkBtn.textContent = 'Remove Watermark (Pro)';
         } else if (!watermarkRemoved) {
-          removeWatermarkBtn.textContent = '?? Remove Watermark';
+          removeWatermarkBtn.textContent = 'Remove Watermark';
         }
       }
 
@@ -965,7 +965,7 @@
     // Only Pro users can click Remove Watermark and only until it's removed
     removeWatermarkBtn.disabled = (!userIsPro) || watermarkRemoved;
     if (watermarkRemoved) {
-      removeWatermarkBtn.textContent = "? Watermark Removed";
+      removeWatermarkBtn.textContent = "Watermark Removed";
       removeWatermarkBtn.classList.remove("btn-warning");
       removeWatermarkBtn.classList.add("btn-success");
     }
@@ -1115,7 +1115,7 @@
             watermarkRemoved = true;
             
             // Update UI to reflect watermark removal
-            removeWatermarkBtn.textContent = "? Watermark Removed";
+            removeWatermarkBtn.textContent = "Watermark Removed";
             removeWatermarkBtn.disabled = true;
             removeWatermarkBtn.classList.remove("btn-warning");
             removeWatermarkBtn.classList.add("btn-success");
