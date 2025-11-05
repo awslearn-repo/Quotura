@@ -93,8 +93,8 @@
   let currentImageData = null;
   let watermarkRemoved = false;
   let editMode = false;
-  let currentFont = "Arial";
-  let currentFontSize = 28;
+    let currentFont = "Arial";
+    let currentFontSize = 28;
   let currentGradientChoice = null; // null means random
   let currentText = null;           // Current editable text content
   let currentTextHtml = null;       // Current editable HTML content with formatting
@@ -103,6 +103,61 @@
   let userIsPro = false;            // Current gating flag
   let ensuredWatermarkForFree = false; // Ensure watermark once for free tier users
   let startAuthFlowForUpgrade = null;   // Deferred auth launcher for upgrade path
+
+    if (currentSizeDisplay) {
+      currentSizeDisplay.textContent = currentFontSize;
+    }
+
+    function persistFontSettings(fontValue, sizeValue) {
+      const updates = {};
+      if (typeof fontValue === 'string' && fontValue.trim().length > 0) {
+        updates.quoteFont = fontValue.trim();
+      }
+      if (Number.isFinite(sizeValue) && sizeValue > 0) {
+        updates.quoteFontSize = Math.round(sizeValue);
+      }
+      try {
+        if (Object.keys(updates).length === 0) return;
+        if (isChromeAvailable()) {
+          chrome.storage.local.set(updates);
+        } else if (typeof localStorage !== 'undefined') {
+          if (updates.quoteFont) localStorage.setItem('quoteFont', updates.quoteFont);
+          if (updates.quoteFontSize) localStorage.setItem('quoteFontSize', String(updates.quoteFontSize));
+        }
+      } catch (_) {}
+    }
+
+    try {
+      if (isChromeAvailable()) {
+        chrome.storage.local.get(["quoteFont", "quoteFontSize"], (data) => {
+          try {
+            if (data && typeof data.quoteFont === 'string' && data.quoteFont.trim().length > 0) {
+              currentFont = data.quoteFont.trim();
+            }
+            if (data && (typeof data.quoteFontSize === 'number' || typeof data.quoteFontSize === 'string')) {
+              const parsed = Number.parseInt(data.quoteFontSize, 10);
+              if (!Number.isNaN(parsed) && parsed > 0) {
+                currentFontSize = parsed;
+              }
+            }
+            if (currentSizeDisplay) currentSizeDisplay.textContent = currentFontSize;
+          } catch (_) {}
+        });
+      } else if (typeof localStorage !== 'undefined') {
+        const storedFont = localStorage.getItem('quoteFont');
+        if (storedFont && storedFont.trim().length > 0) {
+          currentFont = storedFont.trim();
+        }
+        const storedSize = localStorage.getItem('quoteFontSize');
+        if (storedSize) {
+          const parsed = Number.parseInt(storedSize, 10);
+          if (!Number.isNaN(parsed) && parsed > 0) {
+            currentFontSize = parsed;
+          }
+        }
+        if (currentSizeDisplay) currentSizeDisplay.textContent = currentFontSize;
+      }
+    } catch (_) {}
 
   // Centralized Cognito configuration and URL builders
   const COGNITO_CONFIG = {
@@ -1025,14 +1080,16 @@
   function downloadSVG() {
     if (!isChromeAvailable()) return;
     setButtonLoading(downloadSvgBtn, true);
-    
+
     // Request SVG generation from background script
     chrome.runtime.sendMessage({
       action: "generateSVG",
-      includeWatermark: !watermarkRemoved  // Include watermark unless removed
+      includeWatermark: !watermarkRemoved,  // Include watermark unless removed
+      font: currentFont,
+      fontSize: currentFontSize,
     }, (response) => {
       setButtonLoading(downloadSvgBtn, false);
-      
+
       if (response && response.svgData) {
         // Download the SVG file
         chrome.downloads.download({
@@ -1465,6 +1522,7 @@
   function selectFont(fontName, modal) {
     if (fontName !== currentFont) {
       currentFont = fontName;
+      persistFontSettings(currentFont, currentFontSize);
       regenerateWithSettings();
       showNotification(`Font changed to ${fontName}!`, "success");
       if (inlineEditing) syncInlineEditorStyles();
@@ -1648,38 +1706,39 @@
     const newSize = currentFontSize + delta;
     
     // Constrain size between 12px and 60px
-    if (newSize >= 12 && newSize <= 60) {
-      currentFontSize = newSize;
-      
-      // Update display with animation
-      currentSizeDisplay.classList.add("updating");
-      currentSizeDisplay.textContent = currentFontSize;
-      
-      setTimeout(() => {
-        currentSizeDisplay.classList.remove("updating");
-      }, 300);
-      
-      // Update inline editor style if open
-      if (inlineEditing) syncInlineEditorStyles();
-      
-      // Regenerate image with new size
-      regenerateWithSettings();
-      
-      // Show subtle notification
-      const action = delta > 0 ? "increased" : "decreased";
-      showNotification(`Font size ${action} to ${currentFontSize}px!`, "success");
-    } else {
-      // Show size limit notification
-      const limit = newSize < 12 ? "minimum" : "maximum";
-      const limitValue = newSize < 12 ? "12px" : "60px";
-      showNotification(`${limit} font size is ${limitValue}`, "error");
-      
-      // Brief shake animation for feedback
-      currentSizeDisplay.style.animation = "shake 0.3s ease-in-out";
-      setTimeout(() => {
-        currentSizeDisplay.style.animation = "";
-      }, 300);
-    }
+      if (newSize >= 12 && newSize <= 60) {
+        currentFontSize = newSize;
+
+        // Update display with animation
+        currentSizeDisplay.classList.add("updating");
+        currentSizeDisplay.textContent = currentFontSize;
+
+        setTimeout(() => {
+          currentSizeDisplay.classList.remove("updating");
+        }, 300);
+
+        // Update inline editor style if open
+        if (inlineEditing) syncInlineEditorStyles();
+
+        // Regenerate image with new size
+        regenerateWithSettings();
+
+        // Show subtle notification
+        const action = delta > 0 ? "increased" : "decreased";
+        showNotification(`Font size ${action} to ${currentFontSize}px!`, "success");
+        persistFontSettings(currentFont, currentFontSize);
+      } else {
+        // Show size limit notification
+        const limit = newSize < 12 ? "minimum" : "maximum";
+        const limitValue = newSize < 12 ? "12px" : "60px";
+        showNotification(`${limit} font size is ${limitValue}`, "error");
+
+        // Brief shake animation for feedback
+        currentSizeDisplay.style.animation = "shake 0.3s ease-in-out";
+        setTimeout(() => {
+          currentSizeDisplay.style.animation = "";
+        }, 300);
+      }
   }
   
   /**

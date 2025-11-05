@@ -59,119 +59,6 @@ chrome.contextMenus.onClicked.addListener((info) => {
   }
 });
 
-// Handle messages from preview tab for additional functionality
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "generateWithoutWatermark") {
-    // Prefer custom image background if available
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
-        generateQuoteImageDataWithImage(data.quoteText, data.customBackgroundImage, false).then((imageData) => {
-          sendResponse({ imageData });
-        });
-      } else if (data.quoteText && data.currentGradient) {
-        generateQuoteImageDataWithGradient(data.quoteText, data.currentGradient, false).then((imageData) => {
-          sendResponse({ imageData });
-        });
-      } else if (data.quoteText) {
-        // Fallback: if no gradient stored, use the original function
-        generateQuoteImageData(data.quoteText, false).then((imageData) => {
-          sendResponse({ imageData });
-        });
-      }
-    });
-    return true; // Keep message channel open for async response
-  }
-  
-  if (request.action === "generateSVG") {
-    // Generate SVG version of the quote, preferring custom image background
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
-        generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
-          sendResponse({ svgData });
-        });
-      } else if (data.quoteText) {
-        const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
-        sendResponse({ svgData });
-      }
-    });
-    return true; // Keep message channel open for async response
-  }
-});
-
-/**
- * Generate SVG version of the quote
- * @param {string} text - The quote text
- * @param {Array} gradient - The gradient colors
- * @param {boolean} includeWatermark - Whether to include watermark
- * @returns {string} SVG data URL
- */
-function generateSVGQuote(text, gradient, includeWatermark = true) {
-  // Create a temporary canvas to measure text
-  const canvas = new OffscreenCanvas(800, 400);
-  const ctx = canvas.getContext("2d");
-  ctx.font = "bold 28px Arial";
-  
-  // Wrap text using existing function
-  const lines = wrapText(ctx, text, 720);
-  const lineHeight = 36;
-  const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
-  
-  // Determine text color based on gradient
-  const brightness = getBrightness(gradient[0]);
-  const textColor = brightness > 200 ? "#000000" : "#ffffff";
-  
-  // Generate SVG content
-  let svgContent = `
-    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:${gradient[0]};stop-opacity:1" />
-          <stop offset="100%" style="stop-color:${gradient[1]};stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      
-      <!-- Background -->
-      <rect width="800" height="400" fill="url(#bg-gradient)" />
-      
-      <!-- Text -->
-      <g font-family="Arial" font-weight="bold" font-size="28" fill="${textColor}" text-anchor="middle">
-  `;
-  
-  // Add each line of text
-  lines.forEach((line, i) => {
-    svgContent += `<text x="400" y="${startY + i * lineHeight}">${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text>\n`;
-  });
-  
-  svgContent += `</g>`;
-  
-  // Add watermark if requested
-  if (includeWatermark) {
-    // Calculate average brightness for smart watermark color
-    const startBrightness = getBrightness(gradient[0]);
-    const endBrightness = getBrightness(gradient[1]);
-    const avgBrightness = (startBrightness + endBrightness) / 2;
-    
-    // Choose watermark color based on background brightness
-    let watermarkColor;
-    if (avgBrightness > 150) {
-      // Light background - use dark watermark
-      watermarkColor = "rgba(0,0,0,0.6)";
-    } else {
-      // Dark background - use light watermark
-      watermarkColor = "rgba(255,255,255,0.6)";
-    }
-    
-    svgContent += `
-      <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
-    `;
-  }
-  
-  svgContent += `</svg>`;
-  
-  // Convert to data URL
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgContent);
-}
-
 /**
  * Text wrapping algorithm for canvas/SVG rendering
  * Preserves user-inserted newlines and wraps each paragraph to the given width
@@ -230,6 +117,39 @@ function getBrightness(hex) {
   // Calculate perceived brightness using standard luminance formula
   // Weights: Red=29.9%, Green=58.7%, Blue=11.4% (human eye sensitivity)
   return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
+const SVG_FONT_FALLBACKS = {
+  Arial: 'Arial, sans-serif',
+  Helvetica: 'Helvetica, Arial, sans-serif',
+  'Times New Roman': '"Times New Roman", Times, serif',
+  Georgia: 'Georgia, serif',
+  Verdana: 'Verdana, Geneva, sans-serif',
+};
+
+function normalizeFontFamily(fontFamily) {
+  if (typeof fontFamily !== 'string') return 'Arial';
+  const trimmed = fontFamily.trim();
+  return trimmed.length > 0 ? trimmed : 'Arial';
+}
+
+function buildCanvasFontString(fontFamily, fontSize, weight = 'bold') {
+  const normalizedFamily = normalizeFontFamily(fontFamily);
+  const familyForCanvas = /\s/.test(normalizedFamily) ? `"${normalizedFamily}"` : normalizedFamily;
+  const size = Number.isFinite(fontSize) && fontSize > 0 ? fontSize : 32;
+  return `${weight} ${size}px ${familyForCanvas}`;
+}
+
+function getSvgFontFamily(fontFamily) {
+  const normalizedFamily = normalizeFontFamily(fontFamily);
+  return SVG_FONT_FALLBACKS[normalizedFamily] || normalizedFamily;
+}
+
+function escapeSvgText(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // Load an ImageBitmap from a data URL
@@ -323,7 +243,7 @@ async function generateQuoteImageDataWithImage(text, imageDataUrl, includeWaterm
 }
 
 // Generate SVG using a custom background image (cover fit)
-async function generateSVGQuoteFromImage(text, imageDataUrl, includeWatermark = true) {
+async function generateSVGQuoteFromImage(text, imageDataUrl, includeWatermark = true, fontFamily = 'Arial', fontSize = 32) {
   // Estimate brightness to choose text & watermark colors
   try {
     const bitmap = await loadImageBitmapFromDataUrl(imageDataUrl);
@@ -333,26 +253,27 @@ async function generateSVGQuoteFromImage(text, imageDataUrl, includeWatermark = 
     // Measure wrapped text using a temp canvas for consistency
     const tempCanvas = new OffscreenCanvas(800, 400);
     const tempCtx = tempCanvas.getContext("2d");
-    tempCtx.font = "bold 32px Arial";
+    tempCtx.font = buildCanvasFontString(fontFamily, fontSize);
     const wrappedLines = wrapText(tempCtx, text, 720);
-    const lineHeight = 40;
-    const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
+    const effectiveFontSize = Number.isFinite(fontSize) && fontSize > 0 ? fontSize : 32;
+    const lineHeight = Math.round(effectiveFontSize * 1.3);
+    const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + Math.round(effectiveFontSize * 0.5);
 
-    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const fontFamilyForSvg = getSvgFontFamily(fontFamily);
 
     let svgContent = `
     <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
       <image href="${imageDataUrl}" x="0" y="0" width="800" height="400" preserveAspectRatio="xMidYMid slice" />
       ${wrappedLines.map((line, index) => {
         const y = startY + index * lineHeight;
-        return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="${textColor}">${esc(line)}</text>`;
+        return `<text x="400" y="${y}" text-anchor="middle" font-family="${fontFamilyForSvg}" font-size="${effectiveFontSize}" font-weight="bold" fill="${textColor}">${escapeSvgText(line)}</text>`;
       }).join('\n      ')}
     `;
 
     if (includeWatermark) {
       const watermarkColor = avgBrightness > 150 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
       svgContent += `
-        <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
+        <text x="785" y="385" font-family="${fontFamilyForSvg}" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
       `;
     }
 
@@ -362,15 +283,16 @@ async function generateSVGQuoteFromImage(text, imageDataUrl, includeWatermark = 
     // Fallback: simple white text over embedded image
     const tempCanvas = new OffscreenCanvas(800, 400);
     const tempCtx = tempCanvas.getContext("2d");
-    tempCtx.font = "bold 32px Arial";
+    tempCtx.font = buildCanvasFontString(fontFamily, fontSize);
     const wrappedLines = wrapText(tempCtx, text, 720);
-    const lineHeight = 40;
-    const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
-    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const effectiveFontSize = Number.isFinite(fontSize) && fontSize > 0 ? fontSize : 32;
+    const lineHeight = Math.round(effectiveFontSize * 1.3);
+    const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + Math.round(effectiveFontSize * 0.5);
+    const fontFamilyForSvg = getSvgFontFamily(fontFamily);
     let svgContent = `
     <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
       <image href="${imageDataUrl}" x="0" y="0" width="800" height="400" preserveAspectRatio="xMidYMid slice" />
-      ${wrappedLines.map((line, index) => `<text x="400" y="${startY + index * lineHeight}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="#ffffff">${esc(line)}</text>`).join('\n      ')}
+      ${wrappedLines.map((line, index) => `<text x="400" y="${startY + index * lineHeight}" text-anchor="middle" font-family="${fontFamilyForSvg}" font-size="${effectiveFontSize}" font-weight="bold" fill="#ffffff">${escapeSvgText(line)}</text>`).join('\n      ')}
     </svg>`;
     return `data:image/svg+xml;base64,${btoa(svgContent)}`;
   }
@@ -946,31 +868,28 @@ function generateQuoteImageData(text, includeWatermark = true) {
  * @param {string} font - Font family to use
  * @returns {string} SVG data URL
  */
-function generateSVGQuote(text, gradient, includeWatermark = true) {
-  // Calculate brightness for text color
-  const startBrightness = getBrightness(gradient[0]);
-  const endBrightness = getBrightness(gradient[1]);
+function generateSVGQuote(text, gradient, includeWatermark = true, fontFamily = 'Arial', fontSize = 32) {
+  const fallbackGradient = Array.isArray(gradient) && gradient.length >= 2 ? gradient : ['#667eea', '#764ba2'];
+  const startBrightness = getBrightness(fallbackGradient[0]);
+  const endBrightness = getBrightness(fallbackGradient[1]);
   const avgBrightness = (startBrightness + endBrightness) / 2;
-
-  // Dynamic text color based on background brightness
   const textColor = avgBrightness > 200 ? "#000000" : "#ffffff";
-  
-  // Wrap text for SVG (using a temporary canvas context)
+
   const tempCanvas = new OffscreenCanvas(800, 400);
   const tempCtx = tempCanvas.getContext("2d");
-  tempCtx.font = "bold 32px Arial";
+  tempCtx.font = buildCanvasFontString(fontFamily, fontSize);
   const wrappedLines = wrapText(tempCtx, text, 720);
-  
-  const lineHeight = 40;
-  const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
+  const effectiveFontSize = Number.isFinite(fontSize) && fontSize > 0 ? fontSize : 32;
+  const lineHeight = Math.round(effectiveFontSize * 1.3);
+  const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + Math.round(effectiveFontSize * 0.5);
+  const fontFamilyForSvg = getSvgFontFamily(fontFamily);
 
-    // Create SVG content with clean gradient background and text
   let svgContent = `
     <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:${gradient[0]};stop-opacity:1" />
-          <stop offset="100%" style="stop-color:${gradient[1]};stop-opacity:1" />
+          <stop offset="0%" style="stop-color:${fallbackGradient[0]};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:${fallbackGradient[1]};stop-opacity:1" />
         </linearGradient>
       </defs>
       
@@ -978,25 +897,21 @@ function generateSVGQuote(text, gradient, includeWatermark = true) {
       
       ${wrappedLines.map((line, index) => {
         const y = startY + index * lineHeight;
-        return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="${textColor}">${line}</text>`;
+        return `<text x="400" y="${y}" text-anchor="middle" font-family="${fontFamilyForSvg}" font-size="${effectiveFontSize}" font-weight="bold" fill="${textColor}">${escapeSvgText(line)}</text>`;
       }).join('\n      ')}
     `;
-  
-  // Add watermark if requested
+
   if (includeWatermark) {
-    // Calculate average brightness for smart watermark color
     const watermarkColor = avgBrightness > 150 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
-    
     svgContent += `
-      <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
+      <text x="785" y="385" font-family="${fontFamilyForSvg}" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
     `;
   }
-  
+
   svgContent += `
     </svg>
   `;
-  
-  // Convert to data URL
+
   return `data:image/svg+xml;base64,${btoa(svgContent)}`;
 }
 
@@ -1025,19 +940,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep the message channel open for async response
   }
   
-  if (request.action === "generateSVG") {
-    chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      if (data.quoteText && data.customBackgroundImage) {
-        generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
+    if (request.action === "generateSVG") {
+      chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage", "quoteFont", "quoteFontSize"], (data) => {
+        const fontFamily = normalizeFontFamily(request.font || data.quoteFont || 'Arial');
+        const requestedFontSize = Number.parseInt(request.fontSize ?? data.quoteFontSize, 10);
+        const fontSize = !Number.isNaN(requestedFontSize) && requestedFontSize > 0 ? requestedFontSize : 32;
+
+        if (data.quoteText && data.customBackgroundImage) {
+          generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark, fontFamily, fontSize).then((svgData) => {
+            sendResponse({ svgData: svgData });
+          });
+        } else if (data.quoteText) {
+          const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark, fontFamily, fontSize);
           sendResponse({ svgData: svgData });
-        });
-      } else if (data.quoteText && data.currentGradient) {
-        const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
-        sendResponse({ svgData: svgData });
-      }
-    });
-    return true; // Keep the message channel open for async response
-  }
+        } else {
+          sendResponse({ svgData: null });
+        }
+      });
+      return true; // Keep the message channel open for async response
+    }
   
   if (request.action === "regenerateQuote") {
     chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
@@ -1063,24 +984,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === "regenerateWithSettings") {
-    chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
+      const normalizedFont = typeof request.font === 'string' ? normalizeFontFamily(request.font) : null;
+      const parsedFontSize = Number.parseInt(request.fontSize, 10);
+      const updates = {};
+      if (normalizedFont && normalizedFont.length > 0) {
+        updates.quoteFont = normalizedFont;
+      }
+      if (!Number.isNaN(parsedFontSize) && parsedFontSize > 0) {
+        updates.quoteFontSize = parsedFontSize;
+      }
+      if (Object.keys(updates).length > 0) {
+        chrome.storage.local.set(updates);
+      }
+
+      const fontForGeneration = normalizedFont || (typeof request.font === 'string' ? request.font.trim() : undefined);
+      const fontSizeForGeneration = !Number.isNaN(parsedFontSize) && parsedFontSize > 0 ? parsedFontSize : request.fontSize;
+
+      chrome.storage.local.get(["currentGradient", "customBackgroundImage"], (data) => {
       const incomingHtml = (request && typeof request.html === 'string' && request.html.trim().length > 0) ? request.html : null;
       if (data.customBackgroundImage) {
         const generator = incomingHtml ? generateQuoteImageDataWithImageHtml : generateQuoteImageDataWithImage;
-        generator(incomingHtml || request.text, data.customBackgroundImage, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+          generator(incomingHtml || request.text, data.customBackgroundImage, request.includeWatermark, fontForGeneration, fontSizeForGeneration).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
         });
       } else if (data.currentGradient) {
         const generator = incomingHtml ? generateQuoteImageDataWithSettingsHtml : generateQuoteImageDataWithSettings;
-        generator(incomingHtml || request.text, data.currentGradient, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+          generator(incomingHtml || request.text, data.currentGradient, request.includeWatermark, fontForGeneration, fontSizeForGeneration).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
         });
       } else {
         // Fallback: regenerate with new gradient if currentGradient is missing
         const generator = incomingHtml ? generateQuoteImageDataWithSettingsHtml : generateQuoteImageDataWithSettings;
-        generator(incomingHtml || request.text, null, request.includeWatermark, request.font, request.fontSize).then((imageData) => {
+          generator(incomingHtml || request.text, null, request.includeWatermark, fontForGeneration, fontSizeForGeneration).then((imageData) => {
           chrome.storage.local.set({ quoteImage: imageData });
           sendResponse({ imageData: imageData });
         });
