@@ -83,42 +83,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === "generateSVG") {
+    // Generate SVG version of the quote, preferring custom image background
     chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      const quoteText = typeof data.quoteText === "string" ? data.quoteText : "";
-      const includeWatermark = request && Object.prototype.hasOwnProperty.call(request, "includeWatermark")
-        ? !!request.includeWatermark
-        : true;
-
-      const respondWithError = (error = "svg_generation_failed") => {
-        try { sendResponse({ svgData: null, error }); } catch (_) {}
-      };
-
-      const respondWithData = (svgData) => {
-        if (svgData && typeof svgData === "string") {
-          try { sendResponse({ svgData }); } catch (_) {}
-        } else {
-          respondWithError();
-        }
-      };
-
-      if (!quoteText) {
-        respondWithError("missing_quote");
-        return;
-      }
-
-      if (data.customBackgroundImage) {
-        generateSVGQuoteFromImage(quoteText, data.customBackgroundImage, includeWatermark)
-          .then(respondWithData)
-          .catch(() => respondWithError());
-        return;
-      }
-
-      try {
-        const gradient = Array.isArray(data.currentGradient) ? data.currentGradient : null;
-        const svgData = generateSVGQuote(quoteText, gradient, includeWatermark);
-        respondWithData(svgData);
-      } catch (_) {
-        respondWithError();
+      if (data.quoteText && data.customBackgroundImage) {
+        generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
+          sendResponse({ svgData });
+        });
+      } else if (data.quoteText) {
+        const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
+        sendResponse({ svgData });
       }
     });
     return true; // Keep message channel open for async response
@@ -132,77 +105,71 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * @param {boolean} includeWatermark - Whether to include watermark
  * @returns {string} SVG data URL
  */
-function escapeSvgText(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-function svgContentToDataUrl(svgContent) {
-  try {
-    if (typeof TextEncoder === "function") {
-      const encoder = new TextEncoder();
-      const bytes = encoder.encode(svgContent);
-      let binary = "";
-      bytes.forEach((b) => { binary += String.fromCharCode(b); });
-      return `data:image/svg+xml;base64,${btoa(binary)}`;
-    }
-  } catch (_) {
-    // Fallback to URL encoding below
-  }
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent)}`;
-}
-
 function generateSVGQuote(text, gradient, includeWatermark = true) {
-  const safeGradient = Array.isArray(gradient) && gradient.length >= 2
-    ? gradient
-    : ["#667eea", "#764ba2"];
-  const normalizedText = typeof text === "string" ? text : "";
-
+  // Create a temporary canvas to measure text
   const canvas = new OffscreenCanvas(800, 400);
   const ctx = canvas.getContext("2d");
-  ctx.font = "bold 32px Arial";
-
-  const wrappedLines = wrapText(ctx, normalizedText, 720);
-  const lineHeight = 40;
-  const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
-
-  const startBrightness = getBrightness(safeGradient[0]);
-  const endBrightness = getBrightness(safeGradient[safeGradient.length - 1]);
-  const avgBrightness = (startBrightness + endBrightness) / 2;
-  const textColor = avgBrightness > 200 ? "#000000" : "#ffffff";
-
-  const linesMarkup = wrappedLines.map((line, index) => {
-    const y = startY + index * lineHeight;
-    return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="${textColor}">${escapeSvgText(line)}</text>`;
-  }).join("\n        ");
-
-  let watermarkMarkup = "";
+  ctx.font = "bold 28px Arial";
+  
+  // Wrap text using existing function
+  const lines = wrapText(ctx, text, 720);
+  const lineHeight = 36;
+  const startY = 200 - ((lines.length - 1) * lineHeight) / 2;
+  
+  // Determine text color based on gradient
+  const brightness = getBrightness(gradient[0]);
+  const textColor = brightness > 200 ? "#000000" : "#ffffff";
+  
+  // Generate SVG content
+  let svgContent = `
+    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${gradient[0]};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:${gradient[1]};stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      
+      <!-- Background -->
+      <rect width="800" height="400" fill="url(#bg-gradient)" />
+      
+      <!-- Text -->
+      <g font-family="Arial" font-weight="bold" font-size="28" fill="${textColor}" text-anchor="middle">
+  `;
+  
+  // Add each line of text
+  lines.forEach((line, i) => {
+    svgContent += `<text x="400" y="${startY + i * lineHeight}">${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text>\n`;
+  });
+  
+  svgContent += `</g>`;
+  
+  // Add watermark if requested
   if (includeWatermark) {
-    const watermarkColor = avgBrightness > 150 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
-    watermarkMarkup = `
-        <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>`;
+    // Calculate average brightness for smart watermark color
+    const startBrightness = getBrightness(gradient[0]);
+    const endBrightness = getBrightness(gradient[1]);
+    const avgBrightness = (startBrightness + endBrightness) / 2;
+    
+    // Choose watermark color based on background brightness
+    let watermarkColor;
+    if (avgBrightness > 150) {
+      // Light background - use dark watermark
+      watermarkColor = "rgba(0,0,0,0.6)";
+    } else {
+      // Dark background - use light watermark
+      watermarkColor = "rgba(255,255,255,0.6)";
+    }
+    
+    svgContent += `
+      <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
+    `;
   }
-
-  const svgContent = `
-      <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:${safeGradient[0]};stop-opacity:1" />
-            <stop offset="100%" style="stop-color:${safeGradient[1]};stop-opacity:1" />
-          </linearGradient>
-        </defs>
-
-        <rect width="800" height="400" fill="url(#bgGradient)" />
-
-        ${linesMarkup}
-        ${watermarkMarkup}
-      </svg>`;
-
-  return svgContentToDataUrl(svgContent);
+  
+  svgContent += `</svg>`;
+  
+  // Convert to data URL
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgContent);
 }
 
 /**
@@ -357,59 +324,55 @@ async function generateQuoteImageDataWithImage(text, imageDataUrl, includeWaterm
 
 // Generate SVG using a custom background image (cover fit)
 async function generateSVGQuoteFromImage(text, imageDataUrl, includeWatermark = true) {
-  const normalizedText = typeof text === "string" ? text : "";
+  // Estimate brightness to choose text & watermark colors
   try {
     const bitmap = await loadImageBitmapFromDataUrl(imageDataUrl);
     const avgBrightness = await computeAverageBrightnessFromImageBitmap(bitmap);
     const textColor = pickTextColorFromBrightness(avgBrightness);
 
+    // Measure wrapped text using a temp canvas for consistency
     const tempCanvas = new OffscreenCanvas(800, 400);
     const tempCtx = tempCanvas.getContext("2d");
     tempCtx.font = "bold 32px Arial";
-    const wrappedLines = wrapText(tempCtx, normalizedText, 720);
+    const wrappedLines = wrapText(tempCtx, text, 720);
     const lineHeight = 40;
     const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
 
-    const linesMarkup = wrappedLines.map((line, index) => {
-      const y = startY + index * lineHeight;
-      return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="${textColor}">${escapeSvgText(line)}</text>`;
-    }).join("\n      ");
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    let watermarkMarkup = "";
+    let svgContent = `
+    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <image href="${imageDataUrl}" x="0" y="0" width="800" height="400" preserveAspectRatio="xMidYMid slice" />
+      ${wrappedLines.map((line, index) => {
+        const y = startY + index * lineHeight;
+        return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="${textColor}">${esc(line)}</text>`;
+      }).join('\n      ')}
+    `;
+
     if (includeWatermark) {
       const watermarkColor = avgBrightness > 150 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
-      watermarkMarkup = `
-        <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>`;
+      svgContent += `
+        <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
+      `;
     }
 
-    const svgContent = `
-      <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
-        <image href="${imageDataUrl}" x="0" y="0" width="800" height="400" preserveAspectRatio="xMidYMid slice" />
-        ${linesMarkup}
-        ${watermarkMarkup}
-      </svg>`;
-
-    return svgContentToDataUrl(svgContent);
+    svgContent += `\n    </svg>`;
+    return `data:image/svg+xml;base64,${btoa(svgContent)}`;
   } catch (_) {
+    // Fallback: simple white text over embedded image
     const tempCanvas = new OffscreenCanvas(800, 400);
     const tempCtx = tempCanvas.getContext("2d");
     tempCtx.font = "bold 32px Arial";
-    const wrappedLines = wrapText(tempCtx, normalizedText, 720);
+    const wrappedLines = wrapText(tempCtx, text, 720);
     const lineHeight = 40;
     const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
-
-    const linesMarkup = wrappedLines.map((line, index) => {
-      const y = startY + index * lineHeight;
-      return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="#ffffff">${escapeSvgText(line)}</text>`;
-    }).join("\n      ");
-
-    const fallbackContent = `
-      <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
-        <image href="${imageDataUrl}" x="0" y="0" width="800" height="400" preserveAspectRatio="xMidYMid slice" />
-        ${linesMarkup}
-      </svg>`;
-
-    return svgContentToDataUrl(fallbackContent);
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let svgContent = `
+    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <image href="${imageDataUrl}" x="0" y="0" width="800" height="400" preserveAspectRatio="xMidYMid slice" />
+      ${wrappedLines.map((line, index) => `<text x="400" y="${startY + index * lineHeight}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="#ffffff">${esc(line)}</text>`).join('\n      ')}
+    </svg>`;
+    return `data:image/svg+xml;base64,${btoa(svgContent)}`;
   }
 }
 
@@ -983,6 +946,60 @@ function generateQuoteImageData(text, includeWatermark = true) {
  * @param {string} font - Font family to use
  * @returns {string} SVG data URL
  */
+function generateSVGQuote(text, gradient, includeWatermark = true) {
+  // Calculate brightness for text color
+  const startBrightness = getBrightness(gradient[0]);
+  const endBrightness = getBrightness(gradient[1]);
+  const avgBrightness = (startBrightness + endBrightness) / 2;
+
+  // Dynamic text color based on background brightness
+  const textColor = avgBrightness > 200 ? "#000000" : "#ffffff";
+  
+  // Wrap text for SVG (using a temporary canvas context)
+  const tempCanvas = new OffscreenCanvas(800, 400);
+  const tempCtx = tempCanvas.getContext("2d");
+  tempCtx.font = "bold 32px Arial";
+  const wrappedLines = wrapText(tempCtx, text, 720);
+  
+  const lineHeight = 40;
+  const startY = 200 - ((wrappedLines.length - 1) * lineHeight) / 2 + 16;
+
+    // Create SVG content with clean gradient background and text
+  let svgContent = `
+    <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${gradient[0]};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:${gradient[1]};stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      
+      <rect width="800" height="400" fill="url(#bgGradient)" />
+      
+      ${wrappedLines.map((line, index) => {
+        const y = startY + index * lineHeight;
+        return `<text x="400" y="${y}" text-anchor="middle" font-family="Arial" font-size="32" font-weight="bold" fill="${textColor}">${line}</text>`;
+      }).join('\n      ')}
+    `;
+  
+  // Add watermark if requested
+  if (includeWatermark) {
+    // Calculate average brightness for smart watermark color
+    const watermarkColor = avgBrightness > 150 ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
+    
+    svgContent += `
+      <text x="785" y="385" font-family="Arial" font-size="16" font-weight="bold" fill="${watermarkColor}" text-anchor="end">made with Quotura</text>
+    `;
+  }
+  
+  svgContent += `
+    </svg>
+  `;
+  
+  // Convert to data URL
+  return `data:image/svg+xml;base64,${btoa(svgContent)}`;
+}
+
 // Message listener for handling requests from preview.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "generateWithoutWatermark") {
@@ -1010,41 +1027,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   if (request.action === "generateSVG") {
     chrome.storage.local.get(["quoteText", "currentGradient", "customBackgroundImage"], (data) => {
-      const quoteText = typeof data.quoteText === "string" ? data.quoteText : "";
-      const includeWatermark = request && Object.prototype.hasOwnProperty.call(request, "includeWatermark")
-        ? !!request.includeWatermark
-        : true;
-
-      const respondWithError = (error = "svg_generation_failed") => {
-        try { sendResponse({ svgData: null, error }); } catch (_) {}
-      };
-
-      const respondWithData = (svgData) => {
-        if (svgData && typeof svgData === "string") {
-          try { sendResponse({ svgData }); } catch (_) {}
-        } else {
-          respondWithError();
-        }
-      };
-
-      if (!quoteText) {
-        respondWithError("missing_quote");
-        return;
-      }
-
-      if (data.customBackgroundImage) {
-        generateSVGQuoteFromImage(quoteText, data.customBackgroundImage, includeWatermark)
-          .then(respondWithData)
-          .catch(() => respondWithError());
-        return;
-      }
-
-      try {
-        const gradient = Array.isArray(data.currentGradient) ? data.currentGradient : null;
-        const svgData = generateSVGQuote(quoteText, gradient, includeWatermark);
-        respondWithData(svgData);
-      } catch (_) {
-        respondWithError();
+      if (data.quoteText && data.customBackgroundImage) {
+        generateSVGQuoteFromImage(data.quoteText, data.customBackgroundImage, request.includeWatermark).then((svgData) => {
+          sendResponse({ svgData: svgData });
+        });
+      } else if (data.quoteText && data.currentGradient) {
+        const svgData = generateSVGQuote(data.quoteText, data.currentGradient, request.includeWatermark);
+        sendResponse({ svgData: svgData });
       }
     });
     return true; // Keep the message channel open for async response

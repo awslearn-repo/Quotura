@@ -634,7 +634,7 @@
       const fallbackAuthUrl = buildCognitoAuthUrl(useAction, COGNITO_CONFIG);
 
       // Optional: brief status overlay while the popup opens
-      showAuthOverlay('Opening secure sign-in...');
+      showAuthOverlay('Opening secure sign-in?');
 
       // Open a placeholder popup synchronously to avoid popup blockers
       let popupRef = null;
@@ -663,7 +663,7 @@
               } catch (_) {
                 window.location.href = fallbackAuthUrl;
               }
-              if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window.';
+              if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window?';
               try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
               // Reveal manual open button in case popup was blocked or needs user action
               try { if (authOpenExternalBtn) authOpenExternalBtn.style.display = 'inline-block'; } catch (_) {}
@@ -713,7 +713,7 @@
       } catch (_) {
         window.location.href = fallbackAuthUrl;
       }
-      if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window.';
+      if (authStatusTextEl) authStatusTextEl.textContent = 'Please complete sign-in in the popup window?';
       try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
     }
 
@@ -776,7 +776,7 @@
             chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
               const shouldShow = !!(data && data.pendingAuthFlow && data.pendingAuthVisible);
               resumeAuthBtn.style.display = shouldShow ? 'inline-block' : 'none';
-              resumeAuthBtn.textContent = data && data.pendingAuthFlow === 'signup' ? 'Resume sign-up' : 'Resume sign-in';
+              resumeAuthBtn.textContent = data && data.pendingAuthFlow === 'signup' ? '?? Resume sign-up' : '?? Resume sign-in';
             });
           } catch (_) {}
         }
@@ -888,11 +888,11 @@
         try {
           chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
             if (data && data.pendingAuthFlow && data.pendingAuthVisible) {
-              const text = data.pendingAuthFlow === 'signup' ? 'Please complete sign-up in the popup.' : 'Please complete sign-in in the popup.';
+              const text = data.pendingAuthFlow === 'signup' ? 'Please complete sign-up in the popup?' : 'Please complete sign-in in the popup?';
               showAuthOverlay(text);
               if (resumeAuthBtn) {
                 resumeAuthBtn.style.display = 'inline-block';
-                resumeAuthBtn.textContent = data.pendingAuthFlow === 'signup' ? 'Resume sign-up' : 'Resume sign-in';
+                resumeAuthBtn.textContent = data.pendingAuthFlow === 'signup' ? '?? Resume sign-up' : '?? Resume sign-in';
               }
             }
           });
@@ -991,7 +991,7 @@
       button.classList.add("btn-loading");
       button.disabled = true;
       button.dataset.originalText = button.textContent;
-      button.textContent = "Loading...";
+      button.textContent = "? Loading...";
     } else {
       button.classList.remove("btn-loading");
       button.disabled = false;
@@ -1072,7 +1072,7 @@
       
       // Temporarily change button text to show success
       const originalText = copyImageBtn.textContent;
-      copyImageBtn.textContent = "Copied!";
+      copyImageBtn.textContent = "? Copied!";
       
       setTimeout(() => {
         copyImageBtn.textContent = originalText;
