@@ -229,15 +229,46 @@
       if (!resp.ok) return null;
       const json = await resp.json();
       const idToken = json && json.id_token;
+      const accessToken = json && json.access_token;
       if (!idToken) return null;
       const claims = decodeJwtPayload(idToken);
       const name = extractDisplayNameFromClaims(claims);
       storeUserName(name);
-      try { if (isChromeAvailable()) chrome.storage.local.set({ cognitoIdToken: idToken }); } catch (_) {}
+      // Store both tokens (some APIs expect access_token, others accept id_token)
+      try {
+        if (isChromeAvailable()) {
+          chrome.storage.local.set({
+            cognitoIdToken: idToken,
+            cognitoAccessToken: (typeof accessToken === 'string' && accessToken.trim().length > 0) ? accessToken : null,
+          });
+        }
+      } catch (_) {}
       return name || null;
     } catch (_) {
       return null;
     }
+  }
+
+  async function getAuthTokensFromStorage() {
+    return new Promise((resolve) => {
+      try {
+        if (isChromeAvailable()) {
+          chrome.storage.local.get(["cognitoIdToken", "cognitoAccessToken"], (data) => {
+            resolve({
+              idToken: (data && typeof data.cognitoIdToken === "string") ? data.cognitoIdToken : null,
+              accessToken: (data && typeof data.cognitoAccessToken === "string") ? data.cognitoAccessToken : null,
+            });
+          });
+        } else {
+          resolve({
+            idToken: localStorage.getItem("cognitoIdToken") || null,
+            accessToken: localStorage.getItem("cognitoAccessToken") || null,
+          });
+        }
+      } catch (_) {
+        resolve({ idToken: null, accessToken: null });
+      }
+    });
   }
 
   async function getIdTokenFromStorage() {
@@ -659,8 +690,10 @@
       if (secondaryBtn) secondaryBtn.disabled = true;
       if (copyLinkedinBtn) copyLinkedinBtn.disabled = true;
       try {
-        const idToken = await getIdTokenFromStorage();
-        if (!idToken) {
+        const tokens = await getAuthTokensFromStorage();
+        const idToken = tokens && tokens.idToken;
+        const accessToken = tokens && tokens.accessToken;
+        if (!idToken && !accessToken) {
           setLinkedinStatus('Sign in to generate LinkedIn posts.', 'error');
           showNotification('Sign in to generate LinkedIn posts.', 'error');
           return;
@@ -674,32 +707,100 @@
         }
         const truncated = trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
         const toneValue = getToneValue();
-        const body = { selectedText: truncated };
+        // Send both keys to maximize compatibility with backend payload shapes.
+        const body = { selectedText: truncated, text: truncated };
         if (toneValue) body.tone = toneValue;
         setLinkedinStatus('Generating LinkedIn post...', 'info');
-        const resp = await fetch('https://quotura.imaginetechverse.com/api/ai/linkedin-post', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify(body),
-          credentials: 'omit',
-          cache: 'no-store',
-        });
-        if (!resp.ok) {
-          throw new Error(`LinkedIn API failed (${resp.status})`);
+
+        const endpointUrl = 'https://quotura.imaginetechverse.com/api/ai/linkedin-post';
+
+        async function tryGenerateWithToken(token) {
+          if (!token || typeof token !== 'string') return { ok: false, reason: 'missing_token' };
+          let resp = null;
+          try {
+            resp = await fetch(endpointUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(body),
+              credentials: 'omit',
+              cache: 'no-store',
+            });
+          } catch (e) {
+            return { ok: false, reason: 'network_error', error: e };
+          }
+
+          if (!resp) return { ok: false, reason: 'no_response' };
+
+          let payload = null;
+          let rawText = '';
+          try {
+            rawText = await resp.text();
+          } catch (_) {
+            rawText = '';
+          }
+          try {
+            payload = rawText ? JSON.parse(rawText) : null;
+          } catch (_) {
+            payload = null;
+          }
+
+          return { ok: resp.ok, status: resp.status, payload, rawText };
         }
-        let data = null;
-        try {
-          data = await resp.json();
-        } catch (_) {}
+
+        // Some backends reject id_token but accept access_token (or vice versa). Try both.
+        const candidates = [idToken, accessToken].filter((t, idx, arr) => t && arr.indexOf(t) === idx);
+        let result = null;
+        for (const t of candidates) {
+          // If the first token fails with 401, retry with the other token.
+          const r = await tryGenerateWithToken(t);
+          result = r;
+          if (r && r.ok) break;
+          if (r && r.status && r.status !== 401) break;
+        }
+
+        if (!result || !result.ok) {
+          const status = result && typeof result.status === 'number' ? result.status : null;
+          const payload = result && result.payload;
+          const rawText = result && typeof result.rawText === 'string' ? result.rawText : '';
+          const backendMessage =
+            (payload && typeof payload === 'object' && (payload.message || payload.error || payload.detail)) ||
+            (rawText && rawText.trim().length > 0 ? rawText.trim() : '');
+
+          if (status === 401) {
+            setLinkedinStatus('Your session may have expired. Please sign in again, then retry.', 'error');
+          } else if (status === 403) {
+            setLinkedinStatus('You do not have access to generate LinkedIn posts. If this is a Pro feature, please upgrade.', 'error');
+            try { showUpgradeOverlay('LinkedIn post generation may be a Pro feature.'); } catch (_) {}
+          } else if (status === 429) {
+            setLinkedinStatus('Too many requests. Please wait a moment and try again.', 'error');
+          } else if (status) {
+            setLinkedinStatus(`Unable to generate post (HTTP ${status}). ${backendMessage || 'Please try again.'}`.trim(), 'error');
+          } else {
+            setLinkedinStatus(`Unable to generate post. ${backendMessage || 'Please try again.'}`.trim(), 'error');
+          }
+          throw new Error(`LinkedIn API failed${status ? ` (${status})` : ''}${backendMessage ? `: ${backendMessage}` : ''}`);
+        }
+
+        const data = result.payload;
         let postText = '';
         if (typeof data === 'string') {
           postText = data;
         } else if (data && typeof data === 'object') {
-          const candidates = [data.post, data.text, data.content, data.linkedinPost];
-          postText = candidates.find((value) => typeof value === 'string' && value.trim().length > 0) || '';
+          const postCandidates = [
+            data.post,
+            data.text,
+            data.content,
+            data.linkedinPost,
+            data.linkedin_post,
+            data.postText,
+            data.linkedinPostText,
+            data.generatedText,
+            data.generatedPost,
+          ];
+          postText = postCandidates.find((value) => typeof value === 'string' && value.trim().length > 0) || '';
         }
         if (!postText || typeof postText !== 'string') {
           throw new Error('LinkedIn API returned no text');
@@ -714,7 +815,10 @@
         showNotification('LinkedIn post generated', 'success');
       } catch (error) {
         console.error('LinkedIn generation failed', error);
-        setLinkedinStatus('Unable to generate post. Please try again.', 'error');
+        // Keep the previous, more-specific status if we already set one above.
+        if (!linkedinStatus || !linkedinStatus.textContent) {
+          setLinkedinStatus('Unable to generate post. Please try again.', 'error');
+        }
         showNotification('Failed to generate LinkedIn post', 'error');
       } finally {
         if (primaryBtn) setButtonLoading(primaryBtn, false);
