@@ -712,9 +712,13 @@
         if (toneValue) body.tone = toneValue;
         setLinkedinStatus('Generating LinkedIn post...', 'info');
 
-        const endpointUrl = 'https://quotura.imaginetechverse.com/api/ai/linkedin-post';
+        const endpointUrls = [
+          'https://quotura.imaginetechverse.com/api/ai/linkedin-post',
+          // Fallback: direct API Gateway hostname is already in manifest host_permissions.
+          'https://ffngxtofyb.execute-api.us-east-1.amazonaws.com/ai/linkedin-post',
+        ];
 
-        async function tryGenerateWithToken(token) {
+        async function tryGenerateWithToken(endpointUrl, token) {
           if (!token || typeof token !== 'string') return { ok: false, reason: 'missing_token' };
           let resp = null;
           try {
@@ -734,6 +738,13 @@
 
           if (!resp) return { ok: false, reason: 'no_response' };
 
+          const requestId =
+            resp.headers.get('x-request-id') ||
+            resp.headers.get('x-amzn-requestid') ||
+            resp.headers.get('x-amz-request-id') ||
+            resp.headers.get('x-amz-cf-id') ||
+            null;
+
           let payload = null;
           let rawText = '';
           try {
@@ -747,27 +758,35 @@
             payload = null;
           }
 
-          return { ok: resp.ok, status: resp.status, payload, rawText };
+          return { ok: resp.ok, status: resp.status, payload, rawText, endpointUrl, requestId };
         }
 
         // Some backends reject id_token but accept access_token (or vice versa). Try both.
         const candidates = [idToken, accessToken].filter((t, idx, arr) => t && arr.indexOf(t) === idx);
         let result = null;
-        for (const t of candidates) {
-          // If the first token fails with 401, retry with the other token.
-          const r = await tryGenerateWithToken(t);
-          result = r;
-          if (r && r.ok) break;
-          if (r && r.status && r.status !== 401) break;
+        for (const endpointUrl of endpointUrls) {
+          for (const t of candidates) {
+            // If the first token fails with 401, retry with the other token.
+            const r = await tryGenerateWithToken(endpointUrl, t);
+            result = r;
+            if (r && r.ok) break;
+            // If it isn't an auth problem (or it's a server error), try the next endpoint too.
+            if (r && r.status && r.status !== 401) break;
+          }
+          if (result && result.ok) break;
+          // If the domain returns 5xx, try the API gateway fallback.
+          if (result && result.status && result.status >= 500) continue;
         }
 
         if (!result || !result.ok) {
           const status = result && typeof result.status === 'number' ? result.status : null;
           const payload = result && result.payload;
           const rawText = result && typeof result.rawText === 'string' ? result.rawText : '';
+          const requestId = result && result.requestId ? String(result.requestId) : '';
           const backendMessage =
             (payload && typeof payload === 'object' && (payload.message || payload.error || payload.detail)) ||
             (rawText && rawText.trim().length > 0 ? rawText.trim() : '');
+          const requestIdSuffix = requestId ? ` (request id: ${requestId})` : '';
 
           if (status === 401) {
             setLinkedinStatus('Your session may have expired. Please sign in again, then retry.', 'error');
@@ -777,9 +796,9 @@
           } else if (status === 429) {
             setLinkedinStatus('Too many requests. Please wait a moment and try again.', 'error');
           } else if (status) {
-            setLinkedinStatus(`Unable to generate post (HTTP ${status}). ${backendMessage || 'Please try again.'}`.trim(), 'error');
+            setLinkedinStatus(`Unable to generate post (HTTP ${status}). ${backendMessage || 'Please try again.'}${requestIdSuffix}`.trim(), 'error');
           } else {
-            setLinkedinStatus(`Unable to generate post. ${backendMessage || 'Please try again.'}`.trim(), 'error');
+            setLinkedinStatus(`Unable to generate post. ${backendMessage || 'Please try again.'}${requestIdSuffix}`.trim(), 'error');
           }
           throw new Error(`LinkedIn API failed${status ? ` (${status})` : ''}${backendMessage ? `: ${backendMessage}` : ''}`);
         }
