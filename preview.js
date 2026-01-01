@@ -43,6 +43,12 @@
     if (linkedinSection) {
       linkedinSection.setAttribute('aria-hidden', 'true');
     }
+    const linkedInStartLabelFromDom = startLinkedinBtn && typeof startLinkedinBtn.textContent === 'string'
+      ? startLinkedinBtn.textContent.trim()
+      : '';
+    const defaultLinkedinStartBtnLabel = linkedInStartLabelFromDom || 'Next: Start creating LinkedIn post';
+    const LINKEDIN_PRO_LOCK_LABEL = 'LinkedIn posts (Pro feature)';
+    const LINKEDIN_PRO_STATUS_MESSAGE = 'Upgrade to Pro to generate LinkedIn posts.';
   
   // Helpers to decode JWT and extract a friendly display name
   function base64UrlDecodeToString(base64Url) {
@@ -447,6 +453,7 @@
           });
         } catch (_) {}
       }
+        applyLinkedinFeatureLock();
     } catch (_) {}
   }
 
@@ -572,7 +579,11 @@
   }
 
     function ensureLinkedinSectionVisible(options = {}) {
-      if (!linkedinSection) return;
+      if (!linkedinSection) return false;
+      if (!userIsPro) {
+        setLinkedinStatus(LINKEDIN_PRO_STATUS_MESSAGE, 'error');
+        return false;
+      }
       if (!linkedinSectionVisible) {
         linkedinSectionVisible = true;
         linkedinSection.removeAttribute('hidden');
@@ -586,6 +597,7 @@
           } catch (_) {}
         }, 50);
       }
+      return true;
     }
 
     function getToneValue() {
@@ -603,12 +615,15 @@
     }
 
     function updateLinkedinButtons(hasPost) {
-      const enabled = !!hasPost;
+      const allow = !!userIsPro;
+      if (generateLinkedinBtn) generateLinkedinBtn.disabled = !allow;
+      const enabled = allow && !!hasPost;
       if (regenerateLinkedinBtn) regenerateLinkedinBtn.disabled = !enabled;
       if (copyLinkedinBtn) copyLinkedinBtn.disabled = !enabled;
     }
 
     function persistLinkedinState() {
+      if (!userIsPro) return;
       const toneValue = getToneValue();
       const textValue = linkedinPostOutput && typeof linkedinPostOutput.value === 'string'
         ? linkedinPostOutput.value
@@ -626,6 +641,39 @@
       } catch (_) {}
     }
 
+    function applyLinkedinFeatureLock() {
+      const locked = !userIsPro;
+      if (startLinkedinBtn) {
+        startLinkedinBtn.textContent = locked ? LINKEDIN_PRO_LOCK_LABEL : defaultLinkedinStartBtnLabel;
+        startLinkedinBtn.setAttribute('aria-disabled', locked ? 'true' : 'false');
+        if (locked) {
+          startLinkedinBtn.style.display = '';
+        }
+      }
+      if (linkedinToneInput) {
+        linkedinToneInput.disabled = locked;
+      }
+      if (linkedinPostOutput) {
+        linkedinPostOutput.readOnly = locked;
+        linkedinPostOutput.classList.toggle('pro-locked', locked);
+      }
+      if (locked) {
+        if (linkedinSection) {
+          linkedinSection.setAttribute('hidden', '');
+          linkedinSection.setAttribute('aria-hidden', 'true');
+        }
+        linkedinSectionVisible = false;
+        updateLinkedinButtons(false);
+        setLinkedinStatus(LINKEDIN_PRO_STATUS_MESSAGE, 'info');
+      } else {
+        if (linkedinPostOutput) linkedinPostOutput.readOnly = false;
+        updateLinkedinButtons(currentLinkedinText && currentLinkedinText.trim().length > 0);
+        if (linkedinStatus && linkedinStatus.textContent === LINKEDIN_PRO_STATUS_MESSAGE) {
+          linkedinStatus.textContent = '';
+        }
+      }
+    }
+
     function applyLinkedinStorage(data) {
       if (!data) {
         updateLinkedinButtons(false);
@@ -633,15 +681,19 @@
       }
       const storedTone = typeof data.linkedinPostTone === 'string' ? data.linkedinPostTone : '';
       const storedText = typeof data.linkedinPostText === 'string' ? data.linkedinPostText : '';
-      if (linkedinToneInput && storedTone) {
+      if (linkedinToneInput) {
         linkedinToneInput.value = storedTone;
       }
       if (storedText && storedText.trim().length > 0) {
         currentLinkedinText = storedText;
         if (linkedinPostOutput) linkedinPostOutput.value = storedText;
-        updateLinkedinButtons(true);
-        ensureLinkedinSectionVisible({ scrollIntoView: false });
-        setLinkedinStatus('LinkedIn post ready. Edit or copy anytime.', 'success');
+        if (userIsPro) {
+          updateLinkedinButtons(true);
+          ensureLinkedinSectionVisible({ scrollIntoView: false });
+          setLinkedinStatus('LinkedIn post ready. Edit or copy anytime.', 'success');
+        } else {
+          updateLinkedinButtons(false);
+        }
       } else {
         updateLinkedinButtons(false);
       }
@@ -682,7 +734,13 @@
 
     async function handleLinkedinGeneration(trigger) {
       if (linkedinGenerating) return;
-      ensureLinkedinSectionVisible({ scrollIntoView: trigger !== 'auto' });
+      if (!userIsPro) {
+        setLinkedinStatus(LINKEDIN_PRO_STATUS_MESSAGE, 'error');
+        showUpgradeOverlay('LinkedIn post generation is a Pro feature.');
+        return;
+      }
+      const sectionReady = ensureLinkedinSectionVisible({ scrollIntoView: trigger !== 'auto' });
+      if (!sectionReady) return;
       const primaryBtn = trigger === 'regenerate' ? regenerateLinkedinBtn : generateLinkedinBtn;
       const secondaryBtn = trigger === 'regenerate' ? generateLinkedinBtn : regenerateLinkedinBtn;
       linkedinGenerating = true;
@@ -830,6 +888,11 @@
 
     async function handleLinkedinCopy() {
       if (!linkedinPostOutput) return;
+      if (!userIsPro) {
+        setLinkedinStatus(LINKEDIN_PRO_STATUS_MESSAGE, 'error');
+        showUpgradeOverlay('LinkedIn post generation is a Pro feature.');
+        return;
+      }
       const text = (linkedinPostOutput.value || '').trim();
       if (!text) {
         setLinkedinStatus('Nothing to copy yet.', 'error');
@@ -2145,8 +2208,14 @@
     removeWatermarkBtn.addEventListener("click", handleRemoveWatermarkClick);
 
     updateLinkedinButtons(false);
+    applyLinkedinFeatureLock();
     if (startLinkedinBtn) {
       startLinkedinBtn.addEventListener('click', () => {
+        if (!userIsPro) {
+          setLinkedinStatus(LINKEDIN_PRO_STATUS_MESSAGE, 'error');
+          showUpgradeOverlay('LinkedIn post generation is a Pro feature.');
+          return;
+        }
         ensureLinkedinSectionVisible({ scrollIntoView: true });
         setLinkedinStatus('Enter an optional tone, then generate your LinkedIn post.', 'info');
       });
@@ -2162,6 +2231,11 @@
     }
     if (linkedinPostOutput) {
       linkedinPostOutput.addEventListener('input', () => {
+        if (!userIsPro) {
+          setLinkedinStatus(LINKEDIN_PRO_STATUS_MESSAGE, 'error');
+          linkedinPostOutput.value = currentLinkedinText || '';
+          return;
+        }
         currentLinkedinText = linkedinPostOutput.value || '';
         const hasText = currentLinkedinText.trim().length > 0;
         updateLinkedinButtons(hasText);
