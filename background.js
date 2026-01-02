@@ -1029,10 +1029,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 function createQuoteImage(text) {
   // Clear old image data first to prevent showing stale content
-  chrome.storage.local.remove(['quoteImage', 'linkedinPostText', 'linkedinPostTone'], () => {
+  chrome.storage.local.remove(['quoteImage'], () => {
     // Store the original text for later use and clear any stale formatted HTML
     // Clearing quoteTextHtml prevents previous session's formatted content from overriding new selection
-    chrome.storage.local.set({ quoteText: text, quoteTextHtml: null, linkedinPostText: null, linkedinPostTone: null });
+    chrome.storage.local.set({ quoteText: text, quoteTextHtml: null });
 
     // Prefer custom image or persisted gradient if available
     chrome.storage.local.get(['customBackgroundImage', 'currentGradient'], (data) => {
