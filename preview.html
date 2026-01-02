@@ -1284,89 +1284,7 @@
       }
         .user-tier-note { font-weight: 600; opacity: 0.9; }
 
-        /* LinkedIn workflow */
-        .workflow-next-btn {
-          margin-top: 28px;
-          min-width: 260px;
-          font-size: 16px;
-          font-weight: 600;
-        }
-        .linkedin-section {
-          width: 90%;
-          max-width: 780px;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 20px;
-          padding: 24px 28px;
-          margin-top: 26px;
-          box-shadow: 0 15px 45px rgba(0, 0, 0, 0.25);
-          backdrop-filter: blur(20px);
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-        .linkedin-section[hidden] {
-          display: none;
-        }
-        .linkedin-section h2 {
-          margin: 0;
-          color: #fff;
-          font-size: 22px;
-          font-weight: 700;
-        }
-        .linkedin-intro {
-          color: rgba(255,255,255,0.9);
-          margin: 0;
-          font-weight: 600;
-        }
-        .linkedin-controls {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-        .linkedin-controls label {
-          color: rgba(255,255,255,0.85);
-          font-weight: 600;
-        }
-        .linkedin-controls input {
-          border-radius: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.3);
-          padding: 12px 14px;
-          font-size: 15px;
-          background: rgba(0, 0, 0, 0.15);
-          color: #fff;
-          outline: none;
-        }
-        .linkedin-controls input::placeholder {
-          color: rgba(255,255,255,0.6);
-        }
-        .linkedin-actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-        }
-        .linkedin-textarea {
-          width: 100%;
-          border-radius: 16px;
-          border: 1px solid rgba(255, 255, 255, 0.25);
-          padding: 16px;
-          min-height: 180px;
-          font-size: 15px;
-          line-height: 1.5;
-          background: rgba(0, 0, 0, 0.25);
-          color: #fff;
-          resize: vertical;
-          font-family: inherit;
-          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-        }
-        .linkedin-textarea::placeholder {
-          color: rgba(255,255,255,0.5);
-        }
-        .linkedin-status {
-          min-height: 20px;
-          font-weight: 600;
-          color: #cce0ff;
-        }
+        /* LinkedIn post generation UI removed */
     </style>
   </head>
   <body>
@@ -1468,26 +1386,6 @@
       <button id="copyImageBtn" class="export-btn btn-success">📋 Copy to Clipboard</button>
       <button id="removeWatermarkBtn" class="export-btn btn-warning">🚫 Remove Watermark</button>
     </div>
-
-      <button id="startLinkedinBtn" class="export-btn btn-secondary workflow-next-btn">
-        Next: Start creating LinkedIn post
-      </button>
-
-      <section id="linkedinSection" class="linkedin-section" hidden aria-live="polite" aria-labelledby="linkedinSectionTitle">
-        <h2 id="linkedinSectionTitle">Create your LinkedIn post</h2>
-        <p class="linkedin-intro">Use your highlighted text as the base. We'll craft a LinkedIn-ready caption that you can tweak and copy.</p>
-        <div class="linkedin-controls">
-          <label for="linkedinToneInput">Tone (optional)</label>
-          <input id="linkedinToneInput" type="text" placeholder="e.g. professional, bold, inspirational" autocomplete="off" />
-        </div>
-        <div class="linkedin-actions">
-          <button id="generateLinkedinBtn" class="export-btn btn-primary">✨ Generate post</button>
-          <button id="regenerateLinkedinBtn" class="export-btn btn-secondary" disabled>🔁 Regenerate</button>
-          <button id="copyLinkedinBtn" class="export-btn btn-success" disabled>📋 Copy text</button>
-        </div>
-        <textarea id="linkedinPostOutput" class="linkedin-textarea" rows="8" aria-label="LinkedIn post text" placeholder="Your LinkedIn post will appear here and remain editable..."></textarea>
-        <div id="linkedinStatus" class="linkedin-status"></div>
-      </section>
 
     <!-- Themed Auth Popup Overlay (used for Login/Signup flows) -->
     <div id="authPopupOverlay" class="auth-popup-overlay" aria-hidden="true">

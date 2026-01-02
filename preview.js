@@ -28,21 +28,10 @@
   // Auth UI elements
   const loginBtn = document.getElementById("loginBtn");
   const signupBtn = document.getElementById("signupBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const resumeAuthBtn = document.getElementById("resumeAuthBtn");
-    const authStatus = document.getElementById("authStatus");
-    const userGreeting = document.getElementById("userGreeting");
-    const startLinkedinBtn = document.getElementById("startLinkedinBtn");
-    const linkedinSection = document.getElementById("linkedinSection");
-    const linkedinToneInput = document.getElementById("linkedinToneInput");
-    const generateLinkedinBtn = document.getElementById("generateLinkedinBtn");
-    const regenerateLinkedinBtn = document.getElementById("regenerateLinkedinBtn");
-    const copyLinkedinBtn = document.getElementById("copyLinkedinBtn");
-    const linkedinPostOutput = document.getElementById("linkedinPostOutput");
-    const linkedinStatus = document.getElementById("linkedinStatus");
-    if (linkedinSection) {
-      linkedinSection.setAttribute('aria-hidden', 'true');
-    }
+  const logoutBtn = document.getElementById("logoutBtn");
+  const resumeAuthBtn = document.getElementById("resumeAuthBtn");
+  const authStatus = document.getElementById("authStatus");
+  const userGreeting = document.getElementById("userGreeting");
   
   // Helpers to decode JWT and extract a friendly display name
   function base64UrlDecodeToString(base64Url) {
@@ -111,12 +100,9 @@
   let currentTextHtml = null;       // Current editable HTML content with formatting
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
-    let userIsPro = false;            // Current gating flag
-    let ensuredWatermarkForFree = false; // Ensure watermark once for free tier users
-    let startAuthFlowForUpgrade = null;   // Deferred auth launcher for upgrade path
-    let linkedinSectionVisible = false;
-    let currentLinkedinText = "";
-    let linkedinGenerating = false;
+  let userIsPro = false;            // Current gating flag
+  let ensuredWatermarkForFree = false; // Ensure watermark once for free tier users
+  let startAuthFlowForUpgrade = null;   // Deferred auth launcher for upgrade path
 
     if (currentSizeDisplay) {
       currentSizeDisplay.textContent = currentFontSize;
@@ -570,294 +556,11 @@
       return false;
     }
   }
-
-    function ensureLinkedinSectionVisible(options = {}) {
-      if (!linkedinSection) return;
-      if (!linkedinSectionVisible) {
-        linkedinSectionVisible = true;
-        linkedinSection.removeAttribute('hidden');
-        linkedinSection.setAttribute('aria-hidden', 'false');
-        if (startLinkedinBtn) startLinkedinBtn.style.display = 'none';
-      }
-      if (options.scrollIntoView) {
-        setTimeout(() => {
-          try {
-            linkedinSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          } catch (_) {}
-        }, 50);
-      }
-    }
-
-    function getToneValue() {
-      if (!linkedinToneInput || typeof linkedinToneInput.value !== 'string') return '';
-      return linkedinToneInput.value.trim();
-    }
-
-    function setLinkedinStatus(message, type = "info") {
-      if (!linkedinStatus) return;
-      linkedinStatus.textContent = message || "";
-      let color = '#cce0ff';
-      if (type === 'success') color = '#43e97b';
-      else if (type === 'error') color = '#ff9a9e';
-      linkedinStatus.style.color = color;
-    }
-
-    function updateLinkedinButtons(hasPost) {
-      const enabled = !!hasPost;
-      if (regenerateLinkedinBtn) regenerateLinkedinBtn.disabled = !enabled;
-      if (copyLinkedinBtn) copyLinkedinBtn.disabled = !enabled;
-    }
-
-    function persistLinkedinState() {
-      const toneValue = getToneValue();
-      const textValue = linkedinPostOutput && typeof linkedinPostOutput.value === 'string'
-        ? linkedinPostOutput.value
-        : currentLinkedinText || '';
-      try {
-        if (isChromeAvailable()) {
-          chrome.storage.local.set({
-            linkedinPostText: textValue || '',
-            linkedinPostTone: toneValue || '',
-          });
-        } else if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('linkedinPostText', textValue || '');
-          localStorage.setItem('linkedinPostTone', toneValue || '');
-        }
-      } catch (_) {}
-    }
-
-    function applyLinkedinStorage(data) {
-      if (!data) {
-        updateLinkedinButtons(false);
-        return;
-      }
-      const storedTone = typeof data.linkedinPostTone === 'string' ? data.linkedinPostTone : '';
-      const storedText = typeof data.linkedinPostText === 'string' ? data.linkedinPostText : '';
-      if (linkedinToneInput && storedTone) {
-        linkedinToneInput.value = storedTone;
-      }
-      if (storedText && storedText.trim().length > 0) {
-        currentLinkedinText = storedText;
-        if (linkedinPostOutput) linkedinPostOutput.value = storedText;
-        updateLinkedinButtons(true);
-        ensureLinkedinSectionVisible({ scrollIntoView: false });
-        setLinkedinStatus('LinkedIn post ready. Edit or copy anytime.', 'success');
-      } else {
-        updateLinkedinButtons(false);
-      }
-    }
-
-    function restoreLinkedinState() {
-      try {
-        if (isChromeAvailable()) {
-          chrome.storage.local.get(['linkedinPostText', 'linkedinPostTone'], (data) => {
-            applyLinkedinStorage(data || null);
-          });
-        } else if (typeof localStorage !== 'undefined') {
-          applyLinkedinStorage({
-            linkedinPostText: localStorage.getItem('linkedinPostText') || '',
-            linkedinPostTone: localStorage.getItem('linkedinPostTone') || '',
-          });
-        }
-      } catch (_) {
-        updateLinkedinButtons(false);
-      }
-    }
-
-    function getLinkedinSourceText() {
-      return new Promise((resolve) => {
-        if (typeof currentText === 'string' && currentText.trim().length > 0) {
-          resolve(currentText);
-          return;
-        }
-        if (isChromeAvailable()) {
-          chrome.storage.local.get(['quoteText'], (data) => {
-            resolve((data && typeof data.quoteText === 'string') ? data.quoteText : '');
-          });
-        } else {
-          resolve('');
-        }
-      });
-    }
-
-    async function handleLinkedinGeneration(trigger) {
-      if (linkedinGenerating) return;
-      ensureLinkedinSectionVisible({ scrollIntoView: trigger !== 'auto' });
-      const primaryBtn = trigger === 'regenerate' ? regenerateLinkedinBtn : generateLinkedinBtn;
-      const secondaryBtn = trigger === 'regenerate' ? generateLinkedinBtn : regenerateLinkedinBtn;
-      linkedinGenerating = true;
-      if (primaryBtn) setButtonLoading(primaryBtn, true);
-      if (secondaryBtn) secondaryBtn.disabled = true;
-      if (copyLinkedinBtn) copyLinkedinBtn.disabled = true;
-      try {
-        const tokens = await getAuthTokensFromStorage();
-        const idToken = tokens && tokens.idToken;
-        const accessToken = tokens && tokens.accessToken;
-        if (!idToken && !accessToken) {
-          setLinkedinStatus('Sign in to generate LinkedIn posts.', 'error');
-          showNotification('Sign in to generate LinkedIn posts.', 'error');
-          return;
-        }
-        const baseText = await getLinkedinSourceText();
-        const trimmed = (baseText || '').trim();
-        if (!trimmed) {
-          setLinkedinStatus('Highlight text first, then try again.', 'error');
-          showNotification('Missing selected text for LinkedIn post.', 'error');
-          return;
-        }
-        const truncated = trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
-        const toneValue = getToneValue();
-        // Send both keys to maximize compatibility with backend payload shapes.
-        const body = { selectedText: truncated, text: truncated };
-        if (toneValue) body.tone = toneValue;
-        setLinkedinStatus('Generating LinkedIn post...', 'info');
-
-        const endpointUrl = 'https://quotura.imaginetechverse.com/api/ai/linkedin-post';
-
-        async function tryGenerateWithToken(token) {
-          if (!token || typeof token !== 'string') return { ok: false, reason: 'missing_token' };
-          let resp = null;
-          try {
-            resp = await fetch(endpointUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(body),
-              credentials: 'omit',
-              cache: 'no-store',
-            });
-          } catch (e) {
-            return { ok: false, reason: 'network_error', error: e };
-          }
-
-          if (!resp) return { ok: false, reason: 'no_response' };
-
-          let payload = null;
-          let rawText = '';
-          try {
-            rawText = await resp.text();
-          } catch (_) {
-            rawText = '';
-          }
-          try {
-            payload = rawText ? JSON.parse(rawText) : null;
-          } catch (_) {
-            payload = null;
-          }
-
-          return { ok: resp.ok, status: resp.status, payload, rawText };
-        }
-
-        // Some backends reject id_token but accept access_token (or vice versa). Try both.
-        const candidates = [idToken, accessToken].filter((t, idx, arr) => t && arr.indexOf(t) === idx);
-        let result = null;
-        for (const t of candidates) {
-          // If the first token fails with 401, retry with the other token.
-          const r = await tryGenerateWithToken(t);
-          result = r;
-          if (r && r.ok) break;
-          if (r && r.status && r.status !== 401) break;
-        }
-
-        if (!result || !result.ok) {
-          const status = result && typeof result.status === 'number' ? result.status : null;
-          const payload = result && result.payload;
-          const rawText = result && typeof result.rawText === 'string' ? result.rawText : '';
-          const backendMessage =
-            (payload && typeof payload === 'object' && (payload.message || payload.error || payload.detail)) ||
-            (rawText && rawText.trim().length > 0 ? rawText.trim() : '');
-
-          if (status === 401) {
-            setLinkedinStatus('Your session may have expired. Please sign in again, then retry.', 'error');
-          } else if (status === 403) {
-            setLinkedinStatus('You do not have access to generate LinkedIn posts. If this is a Pro feature, please upgrade.', 'error');
-            try { showUpgradeOverlay('LinkedIn post generation may be a Pro feature.'); } catch (_) {}
-          } else if (status === 429) {
-            setLinkedinStatus('Too many requests. Please wait a moment and try again.', 'error');
-          } else if (status) {
-            setLinkedinStatus(`Unable to generate post (HTTP ${status}). ${backendMessage || 'Please try again.'}`.trim(), 'error');
-          } else {
-            setLinkedinStatus(`Unable to generate post. ${backendMessage || 'Please try again.'}`.trim(), 'error');
-          }
-          throw new Error(`LinkedIn API failed${status ? ` (${status})` : ''}${backendMessage ? `: ${backendMessage}` : ''}`);
-        }
-
-        const data = result.payload;
-        let postText = '';
-        if (typeof data === 'string') {
-          postText = data;
-        } else if (data && typeof data === 'object') {
-          const postCandidates = [
-            data.post,
-            data.text,
-            data.content,
-            data.linkedinPost,
-            data.linkedin_post,
-            data.postText,
-            data.linkedinPostText,
-            data.generatedText,
-            data.generatedPost,
-          ];
-          postText = postCandidates.find((value) => typeof value === 'string' && value.trim().length > 0) || '';
-        }
-        if (!postText || typeof postText !== 'string') {
-          throw new Error('LinkedIn API returned no text');
-        }
-        currentLinkedinText = postText.trim();
-        if (linkedinPostOutput) {
-          linkedinPostOutput.value = currentLinkedinText;
-        }
-        persistLinkedinState();
-        updateLinkedinButtons(true);
-        setLinkedinStatus('LinkedIn post ready. Edit or copy below.', 'success');
-        showNotification('LinkedIn post generated', 'success');
-      } catch (error) {
-        console.error('LinkedIn generation failed', error);
-        // Keep the previous, more-specific status if we already set one above.
-        if (!linkedinStatus || !linkedinStatus.textContent) {
-          setLinkedinStatus('Unable to generate post. Please try again.', 'error');
-        }
-        showNotification('Failed to generate LinkedIn post', 'error');
-      } finally {
-        if (primaryBtn) setButtonLoading(primaryBtn, false);
-        if (secondaryBtn) secondaryBtn.disabled = !currentLinkedinText;
-        if (copyLinkedinBtn) copyLinkedinBtn.disabled = !currentLinkedinText;
-        linkedinGenerating = false;
-      }
-    }
-
-    async function handleLinkedinCopy() {
-      if (!linkedinPostOutput) return;
-      const text = (linkedinPostOutput.value || '').trim();
-      if (!text) {
-        setLinkedinStatus('Nothing to copy yet.', 'error');
-        return;
-      }
-      try {
-        await navigator.clipboard.writeText(text);
-        const original = copyLinkedinBtn ? copyLinkedinBtn.textContent : '';
-        if (copyLinkedinBtn) {
-          copyLinkedinBtn.textContent = '✅ Copied!';
-        }
-        setLinkedinStatus('Copied to clipboard.', 'success');
-        setTimeout(() => {
-          if (copyLinkedinBtn && original) {
-            copyLinkedinBtn.textContent = original;
-          }
-        }, 1500);
-      } catch (error) {
-        console.error('Copy failed', error);
-        setLinkedinStatus('Clipboard copy failed. Select text manually.', 'error');
-      }
-    }
   
   // Initialize the preview page
     try {
       initializeAuth();
       initializePreview();
-      restoreLinkedinState();
   } catch (e) {
     console.warn('initializePreview failed', e);
     msg.textContent = "Open via the extension to generate the image.";
@@ -2143,38 +1846,6 @@
     downloadSvgBtn.addEventListener("click", downloadSVG);
     copyImageBtn.addEventListener("click", copyToClipboard);
     removeWatermarkBtn.addEventListener("click", handleRemoveWatermarkClick);
-
-    updateLinkedinButtons(false);
-    if (startLinkedinBtn) {
-      startLinkedinBtn.addEventListener('click', () => {
-        ensureLinkedinSectionVisible({ scrollIntoView: true });
-        setLinkedinStatus('Enter an optional tone, then generate your LinkedIn post.', 'info');
-      });
-    }
-    if (generateLinkedinBtn) {
-      generateLinkedinBtn.addEventListener('click', () => handleLinkedinGeneration('generate'));
-    }
-    if (regenerateLinkedinBtn) {
-      regenerateLinkedinBtn.addEventListener('click', () => handleLinkedinGeneration('regenerate'));
-    }
-    if (copyLinkedinBtn) {
-      copyLinkedinBtn.addEventListener('click', handleLinkedinCopy);
-    }
-    if (linkedinPostOutput) {
-      linkedinPostOutput.addEventListener('input', () => {
-        currentLinkedinText = linkedinPostOutput.value || '';
-        const hasText = currentLinkedinText.trim().length > 0;
-        updateLinkedinButtons(hasText);
-        if (hasText) {
-          setLinkedinStatus('Post updated. Copy when you are ready to share.', 'info');
-        }
-        persistLinkedinState();
-      });
-    }
-    if (linkedinToneInput) {
-      linkedinToneInput.addEventListener('change', persistLinkedinState);
-      linkedinToneInput.addEventListener('blur', persistLinkedinState);
-    }
   
   // Event listener for quick edit
   if (quickEditBtn) quickEditBtn.addEventListener("click", handleQuickEdit);
