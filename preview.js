@@ -100,9 +100,8 @@
   let currentTextHtml = null;       // Current editable HTML content with formatting
   let regenerateDebounceId = null;  // Debounce timer id for live updates
   let inlineEditing = false;        // Whether inline editor is visible
-  let userIsPro = false;            // Current gating flag
-  let ensuredWatermarkForFree = false; // Ensure watermark once for free tier users
-  let startAuthFlowForUpgrade = null;   // Deferred auth launcher for upgrade path
+  let userHasFullAccess = false;    // Logged-in users get full access
+  let ensuredWatermarkForSignedOut = false; // Ensure watermark once for signed-out users
 
     if (currentSizeDisplay) {
       currentSizeDisplay.textContent = currentFontSize;
@@ -167,14 +166,21 @@
     scopes: ["email", "openid"],
   };
 
-  // Backend API configuration
-  const API_BASE_URL = "https://quotura.imaginetechverse.com/api";
-  const API_ENDPOINTS = {
-    user: `${API_BASE_URL}/user`,
-    createTempSession: `${API_BASE_URL}/create-temp-session`,
-  };
-
-  const UPGRADE_PAGE_URL = "https://quotura.imaginetechverse.com/plans.html";
+  function promptLogin(reason) {
+    try {
+      const message = reason && String(reason).trim().length > 0
+        ? `${reason} Please sign in to unlock it.`
+        : 'Please sign in to unlock this feature.';
+      try { showNotification(message, 'info'); } catch (_) {}
+      const authContainer = document.getElementById('authContainer');
+      if (authContainer && typeof authContainer.scrollIntoView === 'function') {
+        authContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (loginBtn && typeof loginBtn.focus === 'function') {
+        try { loginBtn.focus(); } catch (_) {}
+      }
+    } catch (_) {}
+  }
 
   function buildCognitoAuthUrl(action, config, overrideRedirectUri) {
     const url = new URL(`/${action}`, config.domain);
@@ -273,52 +279,20 @@
     });
   }
 
-  async function fetchUserTierAndStore() {
-    try {
-      const idToken = await getIdTokenFromStorage();
-      if (!idToken) return null;
-      const resp = await fetch(API_ENDPOINTS.user, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          Accept: "application/json",
-        },
-        credentials: "omit",
-        cache: "no-store",
-      });
-      if (!resp.ok) return null;
-      const json = await resp.json();
-      const tier = json && (json.tier === "pro" ? "pro" : "free");
-      const trialStartDate = json && typeof json.trialStartDate === "string" ? json.trialStartDate : null;
-      try {
-        if (isChromeAvailable()) {
-          chrome.storage.local.set({ userTier: tier, userTrialStartDate: trialStartDate || null });
-        } else {
-          localStorage.setItem("userTier", tier || "");
-          if (trialStartDate) localStorage.setItem("userTrialStartDate", trialStartDate);
-        }
-      } catch (_) {}
-      return { tier, trialStartDate };
-    } catch (_) {
-      return null;
-    }
-  }
-
   function applyGreetingIfAvailable(signedIn) {
     try {
       if (!signedIn) {
         if (userGreeting) userGreeting.textContent = '';
         return; // default auth text handled elsewhere
       }
-      const setGreetingTexts = (name, tier) => {
+      const setGreetingTexts = (name) => {
         const hasName = name && String(name).trim().length > 0;
-        const planSuffix = tier ? (tier === 'pro' ? ' - Pro plan' : ' - Free plan') : '';
-        if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}${planSuffix}` : '';
+        if (userGreeting) userGreeting.textContent = hasName ? `Hello ${name}` : '';
         // Ensure greeting width aligns with image after text updates
         try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
       };
       const updateFromStorage = () => {
-        chrome.storage.local.get(['cognitoUserName', 'cognitoIdToken', 'userTier'], (data) => {
+        chrome.storage.local.get(['cognitoUserName', 'cognitoIdToken'], (data) => {
           let name = data && typeof data.cognitoUserName === 'string' ? data.cognitoUserName : null;
           if (!name && data && typeof data.cognitoIdToken === 'string') {
             const claims = decodeJwtPayload(data.cognitoIdToken);
@@ -328,53 +302,33 @@
               try { chrome.storage.local.set({ cognitoUserName: computed }); } catch (_) {}
             }
           }
-          const tier = data && typeof data.userTier === 'string' ? data.userTier : null;
-          setGreetingTexts(name, tier);
+          setGreetingTexts(name);
         });
       };
       if (isChromeAvailable()) {
         updateFromStorage();
       } else {
         const name = localStorage.getItem('cognitoUserName');
-        const tier = localStorage.getItem('userTier');
-        setGreetingTexts(name, tier);
+        setGreetingTexts(name);
       }
     } catch (_) {}
   }
 
-  // ---- Pro plan gating helpers ----
-  function applyPlanGating(tier) {
+  // ---- Access gating helpers ----
+  function applyAccessGating(signedIn) {
     try {
-      userIsPro = (tier === 'pro');
-      const upgradeBtn = document.getElementById('upgradeBtn');
       const editHint = document.getElementById('editHint');
 
-      // Toggle upgrade button visibility ? only for signed-in free users
-      const setUpgradeVisibility = (signedIn) => {
-        if (!upgradeBtn) return;
-        upgradeBtn.style.display = (signedIn && !userIsPro) ? 'inline-block' : 'none';
-      };
-      if (isChromeAvailable()) {
-        try {
-          chrome.storage.local.get(['cognitoSignedIn'], (data) => {
-            setUpgradeVisibility(!!(data && data.cognitoSignedIn));
-          });
-        } catch (_) {
-          setUpgradeVisibility(false);
-        }
-      } else {
-        const v = (typeof localStorage !== 'undefined') ? localStorage.getItem('cognitoSignedIn') : 'false';
-        setUpgradeVisibility(v === 'true');
-      }
+      userHasFullAccess = !!signedIn;
 
       // Lock/unlock the right editor panel
       if (editPanel) {
-        editPanel.classList.toggle('locked', !userIsPro);
+        editPanel.classList.toggle('locked', !userHasFullAccess);
       }
 
       // Update inline editor editability and cursor
       if (inlineEditor) {
-        if (userIsPro) {
+        if (userHasFullAccess) {
           inlineEditor.setAttribute('contenteditable', 'true');
           inlineEditor.style.cursor = 'text';
         } else {
@@ -383,30 +337,30 @@
         }
       }
 
-      // Update Remove Watermark button label for free users (keep clickable to show upgrade)
+      // Update Remove Watermark button label for signed-out users
       if (removeWatermarkBtn) {
-        if (!userIsPro && !watermarkRemoved) {
-          removeWatermarkBtn.textContent = 'Remove Watermark (Pro)';
-        } else if (!watermarkRemoved) {
-          removeWatermarkBtn.textContent = 'Remove Watermark';
+        if (watermarkRemoved) {
+          removeWatermarkBtn.textContent = 'Watermark Removed';
+        } else {
+          removeWatermarkBtn.textContent = userHasFullAccess ? 'Remove Watermark' : 'Remove Watermark (Login required)';
         }
       }
 
       // Update instructional hint
       if (editHint) {
-        if (userIsPro) {
+        if (userHasFullAccess) {
           editHint.textContent = 'Tip: click the image to edit the quote. The right panel will appear.';
         } else {
-          editHint.textContent = 'Tip: click the image to preview editing. Upgrade to Pro to edit.';
+          editHint.textContent = 'Tip: sign in to edit and remove the watermark.';
         }
       }
 
       // Ensure overlays align after layout changes
       try { setTimeout(syncEditOverlayToImage, 0); } catch (_) {}
 
-      // Hard-ensure watermark for Free users (once per load)
-      if (!userIsPro && !ensuredWatermarkForFree && isChromeAvailable()) {
-        ensuredWatermarkForFree = true;
+      // Hard-ensure watermark for signed-out users (once per load)
+      if (!userHasFullAccess && !ensuredWatermarkForSignedOut && isChromeAvailable()) {
+        ensuredWatermarkForSignedOut = true;
         try {
           chrome.storage.local.get(["quoteText", "quoteTextHtml"], (data) => {
             const hasText = data && typeof data.quoteText === 'string' && data.quoteText.length > 0;
@@ -426,7 +380,7 @@
                 currentImageData = response.imageData;
                 if (img) img.src = response.imageData;
                 watermarkRemoved = false;
-                // Keep export buttons enabled state consistent for free plan
+                // Keep export buttons enabled state consistent
                 enableExportButtons();
               }
             });
@@ -436,16 +390,15 @@
     } catch (_) {}
   }
 
-  function applyPlanGatingFromStorage() {
+  function applyAccessGatingFromStorage() {
     try {
       if (isChromeAvailable()) {
-        chrome.storage.local.get(['userTier'], (data) => {
-          const tier = data && data.userTier === 'pro' ? 'pro' : 'free';
-          applyPlanGating(tier);
+        chrome.storage.local.get(['cognitoSignedIn'], (data) => {
+          applyAccessGating(!!(data && data.cognitoSignedIn));
         });
       } else {
-        const tier = (localStorage.getItem('userTier') === 'pro') ? 'pro' : 'free';
-        applyPlanGating(tier);
+        const v = (localStorage.getItem('cognitoSignedIn') === 'true');
+        applyAccessGating(v);
       }
     } catch (_) {}
   }
@@ -532,9 +485,9 @@
   function showEditingVisuals() {
     // Ensure overlay matches current image size before showing
     syncEditOverlayToImage();
-    // For Pro users, show the editable background and hide the image under it.
-    // For Free or signed-out users, keep the watermarked image visible and do not show the overlay.
-    if (userIsPro) {
+    // For signed-in users, show the editable background and hide the image under it.
+    // For signed-out users, keep the watermarked image visible and do not show the overlay.
+    if (userHasFullAccess) {
       if (editBackground) editBackground.classList.add('active');
       if (img) img.style.visibility = 'hidden';
     } else {
@@ -804,8 +757,6 @@
       try { chrome.storage.local.set({ pendingAuthFlow: pendingAuthFlow, pendingAuthVisible: true }); } catch (_) {}
     }
 
-    startAuthFlowForUpgrade = startCognitoAuthFlow;
-
     function getLogoutUrl() {
       return buildCognitoLogoutUrl(COGNITO_CONFIG);
     }
@@ -845,10 +796,8 @@
         signupBtn.style.display = "none";
         logoutBtn.style.display = "inline-block";
         if (resumeAuthBtn) resumeAuthBtn.style.display = 'none';
-        // Fetch and display user tier after sign-in
-        fetchUserTierAndStore()
-          .then((res) => { applyGreetingIfAvailable(true); applyPlanGating(res && res.tier ? res.tier : 'free'); })
-          .catch(() => { applyGreetingIfAvailable(true); applyPlanGatingFromStorage(); });
+        applyGreetingIfAvailable(true);
+        applyAccessGating(true);
       } else {
         // Show explicit status when signed out
         authStatus.textContent = "You are not signed in.";
@@ -857,7 +806,7 @@
         signupBtn.style.display = "inline-block";
         logoutBtn.style.display = "none";
         if (userGreeting) userGreeting.textContent = '';
-        applyPlanGating('free');
+        applyAccessGating(false);
         if (resumeAuthBtn) {
           try {
             chrome.storage.local.get(['pendingAuthFlow', 'pendingAuthVisible'], (data) => {
@@ -910,10 +859,8 @@
       exchangeAuthCodeForTokens(authCode, COGNITO_CONFIG.redirectUri).finally(() => {
         setSignedIn(true, authCode);
         updateAuthUI(true);
-        // Also fetch the user tier immediately
-        fetchUserTierAndStore()
-          .then((res) => { applyGreetingIfAvailable(true); applyPlanGating(res && res.tier ? res.tier : 'free'); })
-          .catch(() => { applyGreetingIfAvailable(true); applyPlanGatingFromStorage(); });
+        applyGreetingIfAvailable(true);
+        applyAccessGating(true);
         // Clean the URL to remove the code param for aesthetics
         try {
           const cleanUrl = window.location.origin + window.location.pathname;
@@ -951,10 +898,6 @@
               try { chrome.storage.local.remove(['pendingAuthFlow', 'pendingAuthVisible']); } catch (_) {}
             }
           }
-          if (areaName === 'local' && changes && Object.prototype.hasOwnProperty.call(changes, 'userTier')) {
-            const newTier = (changes.userTier && changes.userTier.newValue) || 'free';
-            applyPlanGating(newTier);
-          }
         });
       }
     } catch (_) {}
@@ -963,13 +906,11 @@
     getSignedIn((signedIn) => {
       updateAuthUI(signedIn);
       if (signedIn) {
-        // Ensure tier is loaded if returning user
-        fetchUserTierAndStore()
-          .then((res) => { applyGreetingIfAvailable(true); applyPlanGating(res && res.tier ? res.tier : 'free'); })
-          .catch(() => { applyGreetingIfAvailable(true); applyPlanGatingFromStorage(); });
+        applyGreetingIfAvailable(true);
+        applyAccessGating(true);
       } else {
         applyGreetingIfAvailable(false);
-        applyPlanGating('free');
+        applyAccessGating(false);
       }
       if (!signedIn) {
         try {
@@ -1049,8 +990,8 @@
     downloadPngBtn.disabled = false;
     downloadSvgBtn.disabled = false;
     copyImageBtn.disabled = false;
-    // Only Pro users can click Remove Watermark and only until it's removed
-    removeWatermarkBtn.disabled = (!userIsPro) || watermarkRemoved;
+    // Only signed-in users can click Remove Watermark and only until it's removed
+    removeWatermarkBtn.disabled = (!userHasFullAccess) || watermarkRemoved;
     if (watermarkRemoved) {
       removeWatermarkBtn.textContent = "Watermark Removed";
       removeWatermarkBtn.classList.remove("btn-warning");
@@ -1178,8 +1119,8 @@
    * Remove watermark from image
    */
   function removeWatermark() {
-    // Safety guard: never allow non-Pro users to remove watermark
-    if (!userIsPro) { showUpgradeOverlay('Removing watermark is a Pro feature.'); return; }
+    // Safety guard: never allow signed-out users to remove watermark
+    if (!userHasFullAccess) { promptLogin('Removing watermark requires login.'); return; }
     if (watermarkRemoved || !isChromeAvailable()) return;
     
     setButtonLoading(removeWatermarkBtn, true);
@@ -1253,10 +1194,7 @@
      * Handle Remove Watermark button click
      */
     function handleRemoveWatermarkClick() {
-      if (!userIsPro) {
-        showUpgradeOverlay('Removing watermark is a Pro feature.');
-        return;
-      }
+      if (!userHasFullAccess) return promptLogin('Removing watermark requires login.');
       removeWatermark();
     }
   
@@ -1270,12 +1208,12 @@
       editPanel.classList.add("active");
       if (quickEditBtn) quickEditBtn.style.opacity = "0.7";
     }
-    // For non-Pro (including signed-out), keep image visible and panel locked without opening editor
-    if (!userIsPro) {
+    // For signed-out users, keep image visible and panel locked without opening editor
+    if (!userHasFullAccess) {
       hideEditingVisuals();
       return;
     }
-    // Pro users: open the inline editor on first click; focus if already open
+    // Signed-in users: open the inline editor on first click; focus if already open
     if (!inlineEditing) {
       openInlineEditor();
     } else {
@@ -1380,7 +1318,7 @@
 
   function toggleCommand(command) {
     try {
-      if (!userIsPro) { showUpgradeOverlay('Text formatting is a Pro feature.'); return; }
+      if (!userHasFullAccess) { promptLogin('Text formatting requires login.'); return; }
       ensureInlineEditorOpen();
       // Use deprecated execCommand for simplicity; widely supported for contentEditable
       document.execCommand(command, false, null);
@@ -1436,8 +1374,8 @@
         syncInlineEditorStyles();
         inlineEditing = true;
         inlineEditor.classList.add('active');
-        // Apply content editability based on plan
-        if (userIsPro) {
+        // Apply content editability based on login state
+        if (userHasFullAccess) {
           inlineEditor.setAttribute('contenteditable', 'true');
           placeCaretAtEnd(inlineEditor);
           inlineEditor.focus();
@@ -1459,7 +1397,7 @@
       syncInlineEditorStyles();
       inlineEditing = true;
       inlineEditor.classList.add('active');
-      if (userIsPro) {
+      if (userHasFullAccess) {
         inlineEditor.setAttribute('contenteditable', 'true');
         placeCaretAtEnd(inlineEditor);
         inlineEditor.focus();
@@ -1853,8 +1791,8 @@
   // Event listeners for edit panel
   fontBtn.addEventListener("click", handleFontChange);
   backgroundBtn.addEventListener("click", handleBackgroundChange);
-  decreaseSizeBtn.addEventListener("click", () => { if (!userIsPro) return showUpgradeOverlay('Editor is locked. Upgrade to Pro.'); handleSizeChange(-2); });
-  increaseSizeBtn.addEventListener("click", () => { if (!userIsPro) return showUpgradeOverlay('Editor is locked. Upgrade to Pro.'); handleSizeChange(2); });
+  decreaseSizeBtn.addEventListener("click", () => { if (!userHasFullAccess) return promptLogin('The editor is locked.'); handleSizeChange(-2); });
+  increaseSizeBtn.addEventListener("click", () => { if (!userHasFullAccess) return promptLogin('The editor is locked.'); handleSizeChange(2); });
   doneBtn.addEventListener("click", handleDone);
   
   // Open quick edit panel when image is clicked
@@ -1862,7 +1800,7 @@
   
   // Inline editor live update
   inlineEditor.addEventListener('input', () => {
-    if (!userIsPro) { showUpgradeOverlay('Editing text is a Pro feature.'); return; }
+    if (!userHasFullAccess) { promptLogin('Editing requires login.'); return; }
     const newText = (inlineEditor.innerText || '').replace(/\r\n/g, '\n');
     const newHtml = inlineEditor.innerHTML || '';
     currentText = newText;
@@ -1895,129 +1833,13 @@
   if (italicBtn) italicBtn.addEventListener('click', () => toggleCommand('italic'));
   if (underlineBtn) underlineBtn.addEventListener('click', () => toggleCommand('underline'));
   
-  // Upgrade overlay wiring
-  const upgradeBtn = document.getElementById('upgradeBtn');
-  const upgradeOverlay = document.getElementById('upgradePopupOverlay');
-  const upgradeCloseBtn = document.getElementById('upgradePopupCloseBtn');
-  const upgradeStartBtn = document.getElementById('upgradeStartBtn');
   const editPanelLock = document.getElementById('editPanelLock');
+  if (editPanelLock) editPanelLock.addEventListener('click', () => {
+    if (!userHasFullAccess) promptLogin('The editor is locked.');
+  });
 
-  function setPageInertExceptUpgrade(enable) {
-    try {
-      if (!upgradeOverlay) return;
-      const children = Array.from(document.body.children);
-      children.forEach((el) => {
-        if (el === upgradeOverlay) return;
-        if (enable) { el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); }
-        else { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
-      });
-    } catch (_) {}
-  }
-
-  function focusUpgradeDialog() {
-    try {
-      if (!upgradeOverlay) return;
-      const dialogContainer = upgradeOverlay.querySelector('.auth-popup-container');
-      if (dialogContainer) {
-        if (!dialogContainer.hasAttribute('tabindex')) dialogContainer.setAttribute('tabindex', '-1');
-        dialogContainer.focus();
-      }
-    } catch (_) {}
-  }
-
-  function showUpgradeOverlay(message) {
-    try {
-      if (!upgradeOverlay) return;
-      const textEl = upgradeOverlay.querySelector('.auth-popup-text');
-      if (textEl && message) textEl.textContent = message;
-      upgradeOverlay.classList.add('active');
-      upgradeOverlay.setAttribute('aria-hidden', 'false');
-      focusUpgradeDialog();
-      setPageInertExceptUpgrade(true);
-    } catch (_) {}
-  }
-
-  function hideUpgradeOverlay() {
-    try {
-      if (!upgradeOverlay) return;
-      upgradeOverlay.classList.remove('active');
-      upgradeOverlay.setAttribute('aria-hidden', 'true');
-      setPageInertExceptUpgrade(false);
-      try { if (upgradeBtn) upgradeBtn.focus(); } catch (_) {}
-    } catch (_) {}
-  }
-
-  async function createTempSessionAndOpenUpgrade() {
-    try {
-      const idToken = await getIdTokenFromStorage();
-      if (typeof idToken !== 'string' || idToken.trim().length === 0) {
-        showNotification('Login required to upgrade', 'error');
-        if (typeof startAuthFlowForUpgrade === 'function') {
-          try { startAuthFlowForUpgrade('login'); } catch (_) {}
-        }
-        return;
-      }
-
-      let response;
-      try {
-        response = await fetch(API_ENDPOINTS.createTempSession, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-            Accept: 'application/json',
-          },
-          credentials: 'omit',
-          cache: 'no-store',
-        });
-      } catch (_) {
-        showNotification('Login required to upgrade', 'error');
-        return;
-      }
-
-      if (!response || !response.ok) {
-        showNotification('Login required to upgrade', 'error');
-        return;
-      }
-
-      let sessionId = null;
-      try {
-        const payload = await response.json();
-        if (payload && typeof payload === 'object') {
-          sessionId = payload.sessionId || payload.session || payload.id || payload.sessionID || null;
-        }
-      } catch (_) {}
-
-      if (!sessionId || typeof sessionId !== 'string') {
-        showNotification('Login required to upgrade', 'error');
-        return;
-      }
-
-      const upgradeUrl = `${UPGRADE_PAGE_URL}?session=${encodeURIComponent(sessionId)}`;
-      try {
-        window.open(upgradeUrl, '_blank');
-      } catch (_) {
-        showNotification('Login required to upgrade', 'error');
-      }
-    } catch (_) {
-      showNotification('Login required to upgrade', 'error');
-    }
-  }
-
-  function handleUpgradeButtonClick(event) {
-    try {
-      if (event && typeof event.preventDefault === 'function') event.preventDefault();
-    } catch (_) {}
-    hideUpgradeOverlay();
-    createTempSessionAndOpenUpgrade();
-  }
-
-  if (upgradeBtn) upgradeBtn.addEventListener('click', handleUpgradeButtonClick);
-  if (upgradeCloseBtn) upgradeCloseBtn.addEventListener('click', hideUpgradeOverlay);
-  if (upgradeStartBtn) upgradeStartBtn.addEventListener('click', handleUpgradeButtonClick);
-  if (editPanelLock) editPanelLock.addEventListener('click', () => showUpgradeOverlay('The editor is locked. Upgrade to Pro.'));
-
-  // Apply gating immediately on load
-  applyPlanGatingFromStorage();
+  // Apply access gating immediately on load
+  applyAccessGatingFromStorage();
   
   // Interactive blob functionality
   initializeInteractiveBlobs();

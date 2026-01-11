@@ -14,15 +14,7 @@
     if (!greetingEl) return;
     if (name && String(name).trim().length > 0) {
       try {
-        const update = (tier) => {
-          const planSuffix = tier ? (tier === 'pro' ? ' — Pro plan' : ' — Free plan') : '';
-          greetingEl.textContent = `Hello ${name}${planSuffix}`;
-        };
-        if (isChromeAvailable()) {
-          chrome.storage.local.get(['userTier'], (d) => update(d && d.userTier));
-        } else {
-          update(localStorage.getItem('userTier'));
-        }
+        greetingEl.textContent = `Hello ${name}`;
       } catch (_) {
         greetingEl.textContent = `Hello ${name}`;
       }
@@ -33,14 +25,12 @@
 
   try {
     if (isChromeAvailable()) {
-      chrome.storage.local.get(['cognitoUserName', 'cognitoSignedIn', 'userTier'], (data) => {
+      chrome.storage.local.get(['cognitoUserName', 'cognitoSignedIn'], (data) => {
         const signedIn = !!(data && data.cognitoSignedIn);
         const name = data && typeof data.cognitoUserName === 'string' ? data.cognitoUserName : '';
         if (signedIn) {
-          const tier = data && typeof data.userTier === 'string' ? data.userTier : null;
           if (name) {
-            const planSuffix = tier ? (tier === 'pro' ? ' — Pro plan' : ' — Free plan') : '';
-            greetingEl.textContent = `Hello ${name}${planSuffix}`;
+            greetingEl.textContent = `Hello ${name}`;
           } else {
             setGreeting('');
           }
@@ -53,13 +43,11 @@
           if (area !== 'local') return;
           const nameChange = changes.cognitoUserName && changes.cognitoUserName.newValue;
           const signedInChange = changes.cognitoSignedIn && changes.cognitoSignedIn.newValue;
-          const tierChange = changes.userTier && changes.userTier.newValue;
-          if (typeof nameChange !== 'undefined' || typeof signedInChange !== 'undefined' || typeof tierChange !== 'undefined') {
-            chrome.storage.local.get(['cognitoUserName', 'cognitoSignedIn', 'userTier'], (d) => {
+          if (typeof nameChange !== 'undefined' || typeof signedInChange !== 'undefined') {
+            chrome.storage.local.get(['cognitoUserName', 'cognitoSignedIn'], (d) => {
               const show = d && d.cognitoSignedIn ? d.cognitoUserName : '';
               if (show) {
-                const planSuffix = d && d.userTier ? (d.userTier === 'pro' ? ' — Pro plan' : ' — Free plan') : '';
-                greetingEl.textContent = `Hello ${show}${planSuffix}`;
+                greetingEl.textContent = `Hello ${show}`;
               } else {
                 setGreeting('');
               }
