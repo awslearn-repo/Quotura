@@ -8,44 +8,7 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Listen for request to fetch user tier (from preview or elsewhere)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request && request.action === 'fetchUserTier') {
-    try {
-      chrome.storage.local.get(['cognitoIdToken'], async (data) => {
-        const idToken = data && typeof data.cognitoIdToken === 'string' ? data.cognitoIdToken : null;
-        if (!idToken) {
-          sendResponse({ ok: false, error: 'missing_token' });
-          return;
-        }
-        const apiUrl = 'https://quotura.imaginetechverse.com/api/user';
-        try {
-          const resp = await fetch(apiUrl, {
-            method: 'GET',
-            headers: { Authorization: `Bearer ${idToken}`, Accept: 'application/json' },
-            credentials: 'omit',
-            cache: 'no-store',
-          });
-          if (!resp.ok) {
-            sendResponse({ ok: false, status: resp.status });
-            return;
-          }
-          const json = await resp.json();
-          const tier = json && (json.tier === 'pro' ? 'pro' : 'free');
-          const trialStartDate = json && typeof json.trialStartDate === 'string' ? json.trialStartDate : null;
-          chrome.storage.local.set({ userTier: tier, userTrialStartDate: trialStartDate || null }, () => {
-            sendResponse({ ok: true, tier, trialStartDate });
-          });
-        } catch (e) {
-          sendResponse({ ok: false, error: 'network_error' });
-        }
-      });
-    } catch (e) {
-      sendResponse({ ok: false, error: 'unexpected' });
-    }
-    return true; // Keep channel open for async sendResponse
-  }
-});
+// Note: Subscription tiers have been removed; login now unlocks all features.
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener((info) => {
