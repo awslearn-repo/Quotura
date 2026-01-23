@@ -159,10 +159,19 @@
     } catch (_) {}
 
   // Centralized Cognito configuration and URL builders
+  function getExtensionRedirectUri() {
+    try {
+      if (window.chrome && chrome.runtime && chrome.runtime.id) {
+        return `chrome-extension://${chrome.runtime.id}/preview.html`;
+      }
+    } catch (_) {}
+    return "chrome-extension://mlkcccmkkcdhalkjnlabofccobpdjbio/preview.html";
+  }
+
   const COGNITO_CONFIG = {
     domain: "https://us-east-1mguj75ffn.auth.us-east-1.amazoncognito.com",
     clientId: "4nak1safpk5ueahr20cr2n4vta",
-    redirectUri: "chrome-extension://dlnlebhcjcjkpbggdloipihaobpmlbld/preview.html",
+    redirectUri: getExtensionRedirectUri(),
     scopes: ["email", "openid"],
   };
 
